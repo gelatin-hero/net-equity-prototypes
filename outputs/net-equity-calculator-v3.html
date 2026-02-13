@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Net Equity Simulator | OpenFX</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* Figma design tokens */
+    :root {
+      --color-white: #ffffff;
+      --color-grey-50: #f4f4f4;
+      --color-grey-100: #f0f0f0;
+      --color-grey-400: #adadad;
+      --color-grey-500: #999999;
+      --color-grey-600: #7b7b7b;
+      --color-grey-700: #676767;
+      --color-grey-800: #454545;
+      --color-grey-900: #1c1c1c;
+      --color-green-600: #1d895a;
+      --border-primary: rgba(28, 28, 28, 0.04);
+      --border-secondary: rgba(28, 28, 28, 0.10);
+      --border-emphasis: rgba(28, 28, 28, 0.18);
+      --spacing-xs: 4px;
+      --spacing-s: 8px;
+      --spacing-m: 12px;
+      --spacing-l: 16px;
+      --spacing-xl: 24px;
+      --spacing-2xl: 32px;
+      --spacing-3xl: 48px;
+      --radius-s: 8px;
+      --radius-m: 12px;
+      --font-inter: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--font-inter);
+      background: var(--color-white);
+      color: var(--color-grey-900);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Layout – centered content with generous padding */
+    .container {
+      max-width: 1064px;
+      margin: 0 auto;
+      padding: var(--spacing-3xl) var(--spacing-xl);
+    }
+
+    /* Typography – Figma Base/M/500 for title, Base/S for labels */
+    .title {
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 28px;
+      color: var(--color-grey-900);
+      margin-bottom: var(--spacing-xl);
+    }
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 24px;
+      color: var(--color-grey-900);
+    }
+    .label {
+      font-size: 13px;
+      line-height: 18px;
+      color: var(--color-grey-600);
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-xs);
+    }
+    .label-icon {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--color-grey-100);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      color: var(--color-grey-500);
+      cursor: help;
+    }
+    .value-large {
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 28px;
+      color: var(--color-grey-900);
+      margin: var(--spacing-xs) 0;
+    }
+    .value-breakdown {
+      font-size: 13px;
+      line-height: 18px;
+      color: var(--color-grey-600);
+    }
+    .value-breakdown span { color: var(--color-grey-500); }
+
+    /* Metrics Section – two cards with dividers above and below */
+    .metrics-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--spacing-2xl);
+      padding: var(--spacing-xl) 0;
+      margin-bottom: var(--spacing-xl);
+      border-top: 1px solid var(--color-grey-50);
+      border-bottom: 1px solid var(--color-grey-50);
+    }
+
+    /* Buttons – spacing from design */
+    .btn-group {
+      display: flex;
+      gap: var(--spacing-xs);
+      margin-bottom: var(--spacing-2xl);
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: var(--spacing-s) var(--spacing-l);
+      border-radius: var(--radius-m);
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 18px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: color 200ms ease, background-color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+      box-shadow: 0 0.5px 0 0 var(--border-primary);
+    }
+    @media (hover: hover) and (pointer: fine) {
+      .btn:hover { transition-duration: 200ms; }
+    }
+    .btn-primary {
+      background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0) 100%), var(--color-green-600);
+      color: var(--color-white);
+      border-color: var(--border-emphasis);
+    }
+    .btn-primary:hover { background: linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(0,0,0,0) 100%), #167a4d; }
+    .btn-secondary {
+      background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(0,0,0,0) 100%), var(--color-grey-900);
+      color: var(--color-white);
+      border-color: var(--border-emphasis);
+    }
+    .btn-secondary:hover { background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(0,0,0,0) 100%), var(--color-grey-800); }
+    .btn-tertiary {
+      background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(0,0,0,0) 100%), #4f46e5;
+      color: white;
+      border-color: rgba(79,70,229,0.25);
+    }
+    .btn-tertiary:hover { background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(0,0,0,0) 100%), #4338ca; }
+    .btn-outline {
+      background: var(--color-white);
+      color: var(--color-grey-900);
+      border: 1px solid var(--border-secondary);
+      box-shadow: 0 0.5px 0 0 var(--border-primary);
+    }
+    .btn-outline:hover { background: var(--color-grey-50); border-color: var(--color-grey-400); }
+    .btn-outline .btn-icon-img { filter: brightness(0); }
+    .btn-icon-wrap { display: inline-flex; align-items: center; }
+    .btn-icon-img { width: 16px; height: 16px; object-fit: contain; }
+    .btn-icon { font-size: 14px; }
+
+    /* Table Section – title left, search right */
+    .table-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: var(--spacing-l);
+    }
+    .search-input {
+      padding: var(--spacing-s) var(--spacing-m) var(--spacing-s) 36px;
+      border: 1px solid var(--border-secondary);
+      border-radius: var(--radius-s);
+      font-size: 13px;
+      line-height: 18px;
+      width: 200px;
+      background-color: var(--color-white);
+      background-image: url("../assets/icons/search.svg"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23999999'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: 10px center;
+      background-size: 16px;
+    }
+    .search-input:focus { outline: none; border-color: var(--color-green-600); }
+
+    /* Table – white background, light gray row separators, radius M */
+    .table-container {
+      background: var(--color-white);
+      border-radius: var(--radius-m);
+      border: 1px solid var(--border-secondary);
+      overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left;
+      padding: var(--spacing-m) var(--spacing-l);
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 18px;
+      color: var(--color-grey-600);
+      background: var(--color-grey-50);
+      border-bottom: 1px solid var(--border-secondary);
+    }
+    th:not(:first-child) { text-align: right; }
+    th .sort-icon { margin-left: var(--spacing-xs); opacity: 0.6; }
+    td {
+      padding: var(--spacing-m) var(--spacing-l);
+      font-size: 14px;
+      line-height: 20px;
+      border-bottom: 1px solid var(--border-primary);
+    }
+    td:not(:first-child) { text-align: right; }
+    tr:last-child td { border-bottom: none; }
+    @media (hover: hover) and (pointer: fine) {
+      tr:hover { background: var(--color-grey-50); }
+    }
+
+    .currency-cell { display: flex; align-items: center; gap: var(--spacing-m); }
+    .currency-flag-wrap { display: inline-flex; align-items: center; width: 24px; }
+    .currency-flag-img { width: 24px; height: 24px; object-fit: contain; }
+    .currency-flag { font-size: 20px; width: 24px; }
+    .currency-info { display: flex; flex-direction: column; }
+    .currency-code { font-weight: 600; color: var(--color-grey-900); }
+    .currency-name { font-size: 13px; color: var(--color-grey-600); }
+
+    .balance-positive { color: var(--color-grey-900); font-weight: 500; }
+    .balance-negative { color: #dc2626; font-weight: 500; }
+    .usd-positive { color: var(--color-grey-600); }
+    .usd-negative { color: #dc2626; }
+
+    /* USD column with value + ellipsis menu */
+    .usd-cell {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: var(--spacing-s);
+    }
+    .row-menu-btn {
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border: none;
+      background: none;
+      color: var(--color-grey-500);
+      cursor: pointer;
+      border-radius: var(--radius-s);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .row-menu-btn:hover { color: var(--color-grey-700); background: var(--color-grey-100); }
+
+    .table-footer {
+      padding: var(--spacing-m) var(--spacing-l);
+      background: var(--color-grey-50);
+      border-top: 1px solid var(--border-secondary);
+      font-size: 13px;
+      line-height: 18px;
+      color: var(--color-grey-600);
+      text-align: right;
+    }
+
+    /* Bottom-left floating actions */
+    .fab-group {
+      position: fixed;
+      bottom: var(--spacing-xl);
+      left: var(--spacing-xl);
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-m);
+      z-index: 50;
+    }
+    .fab-simulate {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: var(--spacing-s) var(--spacing-l);
+      border-radius: var(--radius-m);
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 18px;
+      cursor: pointer;
+      border: 1px solid var(--border-secondary);
+      background: var(--color-white);
+      color: var(--color-grey-800);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      transition: transform 200ms cubic-bezier(.25, .46, .45, .94), background-color 200ms ease, border-color 200ms ease, color 200ms ease;
+    }
+    @media (hover: hover) and (pointer: fine) {
+      .fab-simulate:hover { transform: scale(1.02); background: var(--color-grey-50); border-color: var(--color-grey-400); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .fab-simulate { transition: none; }
+      .fab-simulate:hover { transform: none; }
+    }
+    .fab-simulate .fab-simulate-icon { width: 16px; height: 16px; object-fit: contain; }
+    .fab {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--color-green-600);
+      color: var(--color-white);
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(29,137,90,0.4);
+      transition: transform 200ms cubic-bezier(.25, .46, .45, .94), background-color 200ms ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    @media (hover: hover) and (pointer: fine) {
+      .fab:hover { transform: scale(1.05); background: #167a4d; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .fab { transition: none; }
+      .fab:hover { transform: none; }
+    }
+    .fab-icon-wrap { display: flex; align-items: center; justify-content: center; }
+    .fab-icon-img { width: 24px; height: 24px; object-fit: contain; }
+    .rate-btn-icon-wrap { display: inline-flex; align-items: center; }
+    .rate-btn-icon-img { width: 14px; height: 14px; object-fit: contain; margin-right: 2px; }
+
+    /* Modal */
+    .modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center; z-index: 100;
+    }
+    .modal.active { display: flex; }
+    .modal-content {
+      background: var(--color-white);
+      border-radius: var(--radius-m);
+      width: 100%;
+      max-width: 420px;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+      margin: var(--spacing-l);
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: var(--spacing-l) 20px;
+      border-bottom: 1px solid var(--border-secondary);
+    }
+    .modal-title { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+    .modal-title-icon {
+      width: 32px; height: 32px; border-radius: 50%; display: flex;
+      align-items: center; justify-content: center; font-size: 14px;
+    }
+    .modal-title-icon-img { width: 18px; height: 18px; object-fit: contain; }
+    .modal-title-icon.green { background: #dcfce7; color: var(--color-green-600); }
+    .modal-title-icon.dark { background: var(--color-grey-100); color: var(--color-grey-900); }
+    .modal-title-icon.indigo { background: #e0e7ff; color: #4f46e5; }
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      color: var(--color-grey-500);
+      cursor: pointer;
+      line-height: 1;
+    }
+    .modal-close:hover { color: var(--color-grey-600); }
+    .modal-body { padding: 20px; }
+    .modal-footer {
+      padding: var(--spacing-l) 20px;
+      border-top: 1px solid var(--border-secondary);
+      display: flex;
+      gap: var(--spacing-m);
+    }
+    .modal-footer .btn { flex: 1; justify-content: center; padding: 12px 16px; }
+
+    /* Form Elements */
+    .form-group { margin-bottom: 16px; }
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-grey-800);
+      margin-bottom: 6px;
+    }
+    .form-input, .form-select {
+      width: 100%;
+      padding: var(--spacing-m) 14px;
+      border: 1px solid var(--border-secondary);
+      border-radius: var(--radius-s);
+      font-size: 14px;
+      font-family: inherit;
+      background: var(--color-white);
+    }
+    .form-input:focus, .form-select:focus {
+      outline: none;
+      border-color: var(--color-green-600);
+      box-shadow: 0 0 0 3px rgba(29,137,90,0.1);
+    }
+    .form-hint { font-size: 12px; color: var(--color-grey-500); margin-top: var(--spacing-xs); }
+
+    /* Withdrawal Modal Specific */
+    .currency-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px var(--spacing-l);
+      border: 1px solid var(--border-secondary);
+      border-radius: var(--radius-s);
+      margin-bottom: var(--spacing-s);
+      cursor: pointer;
+      transition: border-color 200ms ease, background-color 200ms ease;
+    }
+    @media (hover: hover) and (pointer: fine) {
+      .currency-option:hover:not(.disabled) { border-color: var(--color-green-600); background: #f0fdf4; }
+    }
+    .currency-option.disabled { opacity: 0.5; cursor: not-allowed; background: var(--color-grey-50); }
+    .currency-option-left { display: flex; align-items: center; gap: 12px; }
+    .currency-option-flag .currency-flag-wrap { width: 28px; }
+    .currency-option-flag .currency-flag-img { width: 28px; height: 28px; }
+    .currency-option-flag .currency-flag { font-size: 24px; }
+    .currency-option-right { text-align: right; }
+        .currency-option-balance { font-weight: 600; color: var(--color-grey-900); }
+    .currency-option-avail { font-size: 12px; color: var(--color-grey-600); }
+
+    .withdraw-summary {
+      background: var(--color-grey-50);
+      border-radius: var(--radius-s);
+      padding: var(--spacing-l);
+      margin-bottom: var(--spacing-l);
+    }
+    .withdraw-row { display: flex; justify-content: space-between; align-items: flex-start; }
+    .withdraw-row + .withdraw-row {
+      margin-top: var(--spacing-l);
+      padding-top: var(--spacing-l);
+      border-top: 1px solid var(--border-secondary);
+    }
+    .withdraw-label { font-size: 14px; color: var(--color-grey-800); }
+    .withdraw-sublabel { font-size: 12px; color: var(--color-grey-500); display: flex; align-items: center; gap: var(--spacing-xs); margin-top: 2px; }
+    .withdraw-value { font-size: 16px; font-weight: 600; color: var(--color-grey-900); text-align: right; }
+    .withdraw-value-sub { font-size: 12px; color: var(--color-grey-500); }
+
+    .max-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--spacing-m) 14px;
+      border: 1px solid var(--border-secondary);
+      border-radius: var(--radius-s);
+      cursor: pointer;
+      margin-top: var(--spacing-s);
+    }
+    .max-toggle:hover { border-color: var(--color-grey-400); }
+    .max-toggle-left { display: flex; align-items: center; gap: 10px; }
+    .max-toggle input { width: 16px; height: 16px; accent-color: var(--color-green-600); }
+    .max-badge { background: var(--color-green-600); color: var(--color-white); font-size: 11px; font-weight: 600; padding: 3px var(--spacing-s); border-radius: 4px; }
+
+    .alert { padding: 12px 14px; border-radius: 8px; font-size: 13px; margin-top: 12px; }
+    .alert-error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+    /* Preview boxes */
+    .preview-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 14px; margin-top: 12px; }
+    .preview-box.indigo { background: #eef2ff; border-color: #c7d2fe; }
+    .preview-label { font-size: 12px; color: #166534; margin-bottom: 4px; }
+    .preview-label.indigo { color: #4338ca; }
+    .preview-value { font-size: 16px; font-weight: 600; color: #15803d; }
+    .preview-value.indigo { color: #4f46e5; }
+    .preview-detail { font-size: 12px; color: #6b7280; margin-top: 8px; }
+
+    /* Edit Modal */
+    .edit-section { margin-bottom: 20px; }
+    .edit-section-title { font-size: 13px; font-weight: 600; color: var(--color-grey-800); margin-bottom: var(--spacing-m); }
+    .edit-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .edit-flag { width: 28px; }
+    .edit-flag .currency-flag-img { width: 28px; height: 28px; }
+    .edit-flag .currency-flag { font-size: 18px; }
+    .ws-flag-wrap .currency-flag-wrap { width: 28px; }
+    .ws-flag-wrap .currency-flag-img { width: 28px; height: 28px; }
+    .ws-flag-wrap .currency-flag { font-size: 24px; }
+    .edit-code { font-weight: 600; width: 40px; }
+    .edit-input { flex: 1; padding: 8px 12px; text-align: right; }
+    .edit-usd { font-size: 12px; color: var(--color-grey-600); width: 100px; text-align: right; }
+    .edit-usd.negative { color: #dc2626; }
+
+    .edit-preview { background: var(--color-grey-50); border-radius: var(--radius-s); padding: 14px; }
+    .edit-preview-row { display: flex; justify-content: space-between; font-size: 13px; }
+    .edit-preview-row + .edit-preview-row { margin-top: 8px; }
+    .edit-preview-label { color: var(--color-grey-600); }
+    .edit-preview-value { font-weight: 600; }
+    .edit-preview-value.negative { color: #ef4444; }
+
+    /* Rate refresh */
+    .rate-info {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--spacing-m) 0;
+      margin-top: var(--spacing-s);
+    }
+    .rate-text { font-size: 12px; color: var(--color-grey-500); }
+    .rate-text strong { color: var(--color-grey-600); }
+    .rate-btn {
+      background: var(--color-grey-100);
+      border: none;
+      padding: 6px var(--spacing-m);
+      border-radius: var(--radius-s);
+      font-size: 12px;
+      color: var(--color-grey-600);
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .rate-btn:hover { background: var(--color-grey-400); color: var(--color-grey-800); }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .metrics-section { grid-template-columns: 1fr; gap: 24px; }
+      .btn-group { flex-wrap: wrap; }
+      .table-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+      .search-input { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Title -->
+    <h1 class="title">Overview</h1>
+
+    <!-- Metrics Section -->
+    <div class="metrics-section">
+      <div>
+        <div class="label">Account equity <span class="label-icon" title="Your holdings minus unsettled obligations">?</span></div>
+        <div id="equity-amount" class="value-large">$ 0.00</div>
+        <div class="value-breakdown">
+          Your holdings <span>(<span id="holdings-val">$ 0.00</span>)</span> -
+          Unsettled obligations <span>(<span id="obligations-val">$ 0.00</span>)</span>
+        </div>
+      </div>
+      <div>
+        <div class="label">Available to trade <span class="label-icon" title="Credit limit minus used limit">?</span></div>
+        <div id="trade-amount" class="value-large">$ 0.00</div>
+        <div class="value-breakdown">
+          Credit limit <span>(<span id="credit-val">$ 0.00</span>)</span> -
+          Used limit <span>(<span id="used-val">$ 0.00</span>)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Buttons -->
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="openDepositModal()">
+        <span class="btn-icon-wrap"><img class="btn-icon-img" src="../assets/icons/Deposit.svg" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span class="btn-icon" style="display:none">⊕</span></span> Deposit funds
+      </button>
+      <button class="btn btn-secondary" onclick="openWithdrawModal()">
+        <span class="btn-icon-wrap"><img class="btn-icon-img" src="../assets/icons/withdraw.svg" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span class="btn-icon" style="display:none">⊙</span></span> Withdraw funds
+      </button>
+      <button class="btn btn-outline" onclick="openTradeModal()">
+        <span class="btn-icon-wrap"><img class="btn-icon-img" src="../assets/icons/trade.svg" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span class="btn-icon" style="display:none">⇄</span></span> Execute trade
+      </button>
+    </div>
+
+    <!-- Table Section -->
+    <div class="table-header">
+      <h2 class="section-title">Currency balances</h2>
+      <input type="text" class="search-input" placeholder="Search">
+    </div>
+
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Currency</th>
+            <th>Balance</th>
+            <th>Est. market value in USD <span class="sort-icon">↓</span></th>
+          </tr>
+        </thead>
+        <tbody id="balances-table"></tbody>
+      </table>
+      <div id="table-footer" class="table-footer">Viewing 1–<span id="table-row-count">0</span> of <span id="table-row-total">0</span> rows</div>
+    </div>
+
+    <div class="rate-info">
+      <span class="rate-text">Last rate update: <strong id="last-refresh">--:--:--</strong></span>
+      <button class="rate-btn" onclick="refreshRates()"><span class="rate-btn-icon-wrap"><img class="rate-btn-icon-img" src="../assets/icons/refresh.svg" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span style="display:none">↻</span></span> Refresh FX Rates</button>
+    </div>
+  </div>
+
+  <!-- Bottom-left: Simulate FX + Edit -->
+  <div class="fab-group">
+    <button type="button" class="fab-simulate" onclick="simulateFxRates()" title="Simulate a small FX rate change">
+      <img class="fab-simulate-icon" src="../assets/icons/refresh.svg" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span style="display:none">↻</span>
+      Simulate FX rates
+    </button>
+    <button type="button" class="fab" onclick="openEditModal()" title="Edit Balances & Settings"><span class="fab-icon-wrap"><img class="fab-icon-img" src="../assets/icons/edit.svg" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span style="display:none">✎</span></span></button>
+  </div>
+
+  <!-- Deposit Modal -->
+  <div id="deposit-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-title-icon green modal-title-icon-wrap"><img class="modal-title-icon-img" src="../assets/icons/Deposit.svg" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span style="display:none">⊕</span></span>
+          Deposit funds
+        </div>
+        <button class="modal-close" onclick="closeDepositModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Currency</label>
+          <select id="deposit-currency" class="form-select" onchange="updateDepositPreview()"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Amount to deposit</label>
+          <input type="number" id="deposit-amount" class="form-input" placeholder="Enter amount" oninput="updateDepositPreview()">
+          <div id="deposit-usd" class="form-hint"></div>
+        </div>
+        <div id="deposit-preview" class="preview-box" style="display:none;">
+          <div class="preview-label">After deposit</div>
+          <div id="deposit-new-balance" class="preview-value"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="executeDeposit()">Deposit funds</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Withdraw Modal -->
+  <div id="withdraw-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-title-icon dark modal-title-icon-wrap"><img class="modal-title-icon-img" src="../assets/icons/withdraw.svg" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span style="display:none">⊙</span></span>
+          Withdrawal request
+        </div>
+        <button class="modal-close" onclick="closeWithdrawModal()">&times;</button>
+      </div>
+
+      <!-- Step 1: Currency Selection -->
+      <div id="withdraw-step-1" class="modal-body">
+        <p style="font-size:13px;color:#6b7280;margin-bottom:12px;">Select currency to withdraw</p>
+        <div id="withdraw-currency-list"></div>
+      </div>
+
+      <!-- Step 2: Amount & Confirm -->
+      <div id="withdraw-step-2" style="display:none;">
+        <div class="withdraw-summary" style="border-radius:0;margin:0;">
+          <div class="withdraw-row">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <span id="ws-flag" class="ws-flag-wrap"></span>
+              <div>
+                <div id="ws-code" style="font-weight:600;"></div>
+                <div id="ws-name" style="font-size:12px;color:#6b7280;"></div>
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <div id="ws-balance" style="font-weight:600;"></div>
+              <div id="ws-balance-usd" style="font-size:12px;color:#6b7280;"></div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
+          <div class="withdraw-row">
+            <div>
+              <div class="withdraw-label">Withdrawable balance</div>
+              <div id="ws-held" class="withdraw-sublabel"></div>
+            </div>
+            <div>
+              <div id="ws-withdrawable" class="withdraw-value"></div>
+              <div id="ws-withdrawable-usd" class="withdraw-value-sub"></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Enter amount to withdraw</label>
+            <input type="number" id="withdraw-amount" class="form-input" placeholder="Enter amount" oninput="updateWithdrawPreview()">
+          </div>
+          <label class="max-toggle">
+            <div class="max-toggle-left">
+              <input type="checkbox" id="withdraw-max" onchange="toggleWithdrawMax()">
+              <span style="font-size:13px;color:#374151;">Withdraw maximum available balance</span>
+            </div>
+            <span class="max-badge">MAX</span>
+          </label>
+          <div id="withdraw-error" class="alert alert-error" style="display:none;"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="backToStep1()" style="background:#f3f4f6;color:#374151;">Back</button>
+          <button class="btn btn-primary" onclick="executeWithdraw()">Submit withdrawal</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trade Modal -->
+  <div id="trade-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-title-icon indigo modal-title-icon-wrap"><img class="modal-title-icon-img" src="../assets/icons/trade.svg" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span style="display:none">⇄</span></span>
+          Execute trade
+        </div>
+        <button class="modal-close" onclick="closeTradeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Sell currency (uses credit line)</label>
+          <select id="sell-currency" class="form-select" onchange="updateTradePreview()"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Amount to sell</label>
+          <input type="number" id="sell-amount" class="form-input" placeholder="Enter amount" oninput="updateTradePreview()">
+          <div id="sell-usd" class="form-hint"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Buy currency</label>
+          <select id="buy-currency" class="form-select" onchange="updateTradePreview()"></select>
+        </div>
+        <div id="trade-preview" class="preview-box indigo" style="display:none;">
+          <div class="preview-label indigo">Trade preview</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+            <span id="tp-sell" style="color:#ef4444;font-weight:600;"></span>
+            <span style="color:#9ca3af;">→</span>
+            <span id="tp-buy" style="color:#15803d;font-weight:600;"></span>
+          </div>
+          <div id="tp-rate" class="preview-detail"></div>
+        </div>
+        <div id="trade-error" class="alert alert-error" style="display:none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="executeTrade()"><span class="btn-icon-wrap"><img class="btn-icon-img" src="../assets/icons/trade.svg" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span class="btn-icon" style="display:none">⇄</span></span> Execute trade</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="edit-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title">Edit Balances & Settings</div>
+        <button class="modal-close" onclick="closeEditModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="edit-section">
+          <div class="edit-section-title">Credit Limit (USD)</div>
+          <input type="number" id="edit-credit-limit" class="form-input" style="text-align:right;" placeholder="Enter credit limit" oninput="updateEditPreview()">
+          <div class="form-hint">The credit line extended to this customer</div>
+        </div>
+
+        <div class="edit-section">
+          <div class="edit-section-title">Currency Balances</div>
+          <p class="form-hint" style="margin-bottom:12px;">Negative values = credit used (sold currency you didn't have)</p>
+          <div id="edit-fields"></div>
+        </div>
+
+        <div class="edit-preview">
+          <div class="edit-preview-row">
+            <span class="edit-preview-label">Preview equity</span>
+            <span id="preview-equity" class="edit-preview-value">$ 0.00</span>
+          </div>
+          <div class="edit-preview-row">
+            <span class="edit-preview-label">Preview available to trade</span>
+            <span id="preview-available" class="edit-preview-value">$ 0.00</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeEditModal()" style="background:#f3f4f6;color:#374151;">Cancel</button>
+        <button class="btn btn-primary" onclick="saveBalances()">Save changes</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Asset base path (from outputs/ to project root)
+    const ASSETS_BASE = '../assets';
+    function flagWrap(code, fallback) {
+      const src = ASSETS_BASE + '/flags/' + code + '.svg';
+      return '<span class="currency-flag-wrap"><img class="currency-flag-img" src="' + src + '" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'inline\'"><span class="currency-flag" style="display:none">' + fallback + '</span></span>';
+    }
+
+    // Currency data (flag = emoji fallback when no asset; flags loaded from assets/flags/<code>.svg)
+    const CURRENCIES = {
+      AED: { name: 'United Arab Emirates Dirham', flag: '🇦🇪' },
+      ARS: { name: 'Argentine Peso', flag: '🇦🇷' },
+      AUD: { name: 'Australian Dollar', flag: '🇦🇺' },
+      BRL: { name: 'Brazilian Real', flag: '🇧🇷' },
+      CHF: { name: 'Swiss Franc', flag: '🇨🇭' },
+      COP: { name: 'Colombian Peso', flag: '🇨🇴' },
+      DKK: { name: 'Danish Krone', flag: '🇩🇰' },
+      EUR: { name: 'Euro', flag: '🇪🇺' },
+      EURC: { name: 'Euro Coin', flag: '🪙' },
+      GBP: { name: 'British Pound', flag: '🇬🇧' },
+      HKD: { name: 'Hong Kong Dollar', flag: '🇭🇰' },
+      IDR: { name: 'Indonesian Rupiah', flag: '🇮🇩' },
+      MXN: { name: 'Mexican Peso', flag: '🇲🇽' },
+      NOK: { name: 'Norwegian Krone', flag: '🇳🇴' },
+      PHP: { name: 'Philippine Peso', flag: '🇵🇭' },
+      PLN: { name: 'Polish Złoty', flag: '🇵🇱' },
+      SEK: { name: 'Swedish Krona', flag: '🇸🇪' },
+      SGD: { name: 'Singapore Dollar', flag: '🇸🇬' },
+      USD: { name: 'United States Dollar', flag: '🇺🇸' },
+      USDC: { name: 'USD Coin', flag: '💵' },
+      USDT: { name: 'Tether', flag: '💵' },
+    };
+
+    const BASE_RATES = {
+      USD: 1, USDC: 1, USDT: 1, EUR: 1.08, EURC: 1.08, GBP: 1.27, CHF: 1.12,
+      AUD: 0.65, SGD: 0.74, HKD: 0.13, AED: 0.2723, PLN: 0.25,
+      BRL: 0.17, MXN: 0.058, NOK: 0.09, SEK: 0.095, DKK: 0.14, PHP: 0.017,
+      COP: 0.00024, IDR: 0.000063, ARS: 0.001,
+    };
+
+    let rates = { ...BASE_RATES };
+    let balances = Object.fromEntries(Object.keys(CURRENCIES).map(c => [c, 0]));
+    let creditLimit = 10000000;
+    let editBalances = { ...balances };
+    let selectedWithdrawCurrency = null;
+
+    const fmt = (n) => Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtUSD = (n) => n < 0 ? `- $ ${fmt(n)}` : `$ ${fmt(n)}`;
+    const fmtBal = (n) => n < 0 ? `- ${fmt(n)}` : fmt(n);
+
+    function calculateTotals() {
+      let holdings = 0, obligations = 0;
+      Object.entries(balances).forEach(([c, a]) => {
+        const usd = a * rates[c];
+        if (usd >= 0) holdings += usd; else obligations += Math.abs(usd);
+      });
+      const equity = holdings - obligations;
+      const usedLimit = obligations - holdings;
+      return { holdings, obligations, equity, usedLimit, availableToTrade: creditLimit - usedLimit };
+    }
+
+    function getWithdrawable(currency) {
+      const balance = balances[currency];
+      if (balance <= 0) return { balance: 0, withdrawable: 0, held: 0, heldUSD: 0 };
+      const totals = calculateTotals();
+      const balanceUSD = balance * rates[currency];
+      const maxUSD = Math.max(0, totals.equity);
+      const withdrawableUSD = Math.min(balanceUSD, maxUSD);
+      const withdrawable = withdrawableUSD / rates[currency];
+      const held = balance - withdrawable;
+      return { balance, withdrawable, held, heldUSD: held * rates[currency], balanceUSD, withdrawableUSD };
+    }
+
+    function updateDisplay() {
+      const t = calculateTotals();
+      document.getElementById('equity-amount').textContent = fmtUSD(t.equity);
+      document.getElementById('equity-amount').style.color = t.equity >= 0 ? '#1c1c1c' : '#ef4444';
+      document.getElementById('holdings-val').textContent = fmtUSD(t.holdings);
+      document.getElementById('obligations-val').textContent = fmtUSD(t.obligations);
+      document.getElementById('trade-amount').textContent = fmtUSD(t.availableToTrade);
+      document.getElementById('credit-val').textContent = fmtUSD(creditLimit);
+      document.getElementById('used-val').textContent = fmtUSD(t.usedLimit);
+      document.getElementById('used-val').style.color = t.usedLimit < 0 ? '#1d895a' : '#6b7280';
+
+      const tbody = document.getElementById('balances-table');
+      tbody.innerHTML = Object.entries(CURRENCIES).map(([code, info]) => {
+        const bal = balances[code], usd = bal * rates[code], isNeg = bal < 0;
+        return `<tr>
+          <td><div class="currency-cell">
+            ${flagWrap(code, info.flag)}
+            <div class="currency-info"><span class="currency-code">${code}</span><span class="currency-name">${info.name}</span></div>
+          </div></td>
+          <td class="${isNeg ? 'balance-negative' : 'balance-positive'}">${fmtBal(bal)}</td>
+          <td>
+            <div class="usd-cell">
+              <span class="${isNeg ? 'usd-negative' : 'usd-positive'}">${fmtUSD(usd)}</span>
+              <button type="button" class="row-menu-btn" title="Options" aria-label="Row options">⋮</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+      const n = Object.keys(CURRENCIES).length;
+      document.getElementById('table-row-count').textContent = n;
+      document.getElementById('table-row-total').textContent = n;
+    }
+
+    function refreshRates() {
+      Object.keys(rates).forEach(c => {
+        if (c !== 'USD') rates[c] = BASE_RATES[c] * (1 + (Math.random() - 0.5) * 0.04);
+      });
+      document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString();
+      updateDisplay();
+    }
+
+    /** Simulate a small FX move: each rate changes by ±0.25% to ±1.5% (reasonable tick). */
+    function simulateFxRates() {
+      Object.keys(rates).forEach(c => {
+        if (c === 'USD' || c === 'USDC' || c === 'USDT') return;
+        const pct = 0.0025 + Math.random() * 0.0125;
+        const sign = Math.random() < 0.5 ? -1 : 1;
+        rates[c] = rates[c] * (1 + sign * pct);
+        rates[c] = Math.max(rates[c], BASE_RATES[c] * 0.5);
+        rates[c] = Math.min(rates[c], BASE_RATES[c] * 1.5);
+      });
+      document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString();
+      updateDisplay();
+    }
+
+    // Deposit
+    function openDepositModal() {
+      document.getElementById('deposit-modal').classList.add('active');
+      const sel = document.getElementById('deposit-currency');
+      sel.innerHTML = Object.entries(CURRENCIES).map(([c, i]) => `<option value="${c}">${i.flag} ${c} - ${i.name}</option>`).join('');
+      document.getElementById('deposit-amount').value = '';
+      document.getElementById('deposit-preview').style.display = 'none';
+      document.getElementById('deposit-usd').textContent = '';
+    }
+    function closeDepositModal() { document.getElementById('deposit-modal').classList.remove('active'); }
+    function updateDepositPreview() {
+      const c = document.getElementById('deposit-currency').value;
+      const a = parseFloat(document.getElementById('deposit-amount').value) || 0;
+      if (a > 0) {
+        document.getElementById('deposit-usd').textContent = `≈ ${fmtUSD(a * rates[c])}`;
+        document.getElementById('deposit-preview').style.display = 'block';
+        document.getElementById('deposit-new-balance').innerHTML = flagWrap(c, CURRENCIES[c].flag) + ' ' + c + ': ' + fmt(balances[c] + a);
+      } else {
+        document.getElementById('deposit-usd').textContent = '';
+        document.getElementById('deposit-preview').style.display = 'none';
+      }
+    }
+    function executeDeposit() {
+      const c = document.getElementById('deposit-currency').value;
+      const a = parseFloat(document.getElementById('deposit-amount').value) || 0;
+      if (a > 0) { balances[c] += a; closeDepositModal(); updateDisplay(); }
+    }
+
+    // Withdraw
+    function openWithdrawModal() {
+      document.getElementById('withdraw-modal').classList.add('active');
+      document.getElementById('withdraw-step-1').style.display = 'block';
+      document.getElementById('withdraw-step-2').style.display = 'none';
+      const list = document.getElementById('withdraw-currency-list');
+      list.innerHTML = Object.entries(CURRENCIES).map(([c, i]) => {
+        const { balance, withdrawable } = getWithdrawable(c);
+        const disabled = balance <= 0;
+        return `<div class="currency-option ${disabled ? 'disabled' : ''}" onclick="${disabled ? '' : `selectWithdrawCurrency('${c}')`}">
+          <div class="currency-option-left">
+            <span class="currency-option-flag">${flagWrap(c, i.flag)}</span>
+            <div><div style="font-weight:600;">${c}</div><div style="font-size:12px;color:#6b7280;">${i.name}</div></div>
+          </div>
+          <div class="currency-option-right">
+            <div class="currency-option-balance">${fmt(Math.max(0, balance))}</div>
+            <div class="currency-option-avail">Avail: ${fmt(withdrawable)}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+    function selectWithdrawCurrency(c) {
+      selectedWithdrawCurrency = c;
+      const i = CURRENCIES[c], w = getWithdrawable(c);
+      document.getElementById('withdraw-step-1').style.display = 'none';
+      document.getElementById('withdraw-step-2').style.display = 'block';
+      document.getElementById('ws-flag').innerHTML = flagWrap(c, i.flag);
+      document.getElementById('ws-code').textContent = c;
+      document.getElementById('ws-name').textContent = i.name;
+      document.getElementById('ws-balance').textContent = fmt(w.balance);
+      document.getElementById('ws-balance-usd').textContent = `≈ ${fmtUSD(w.balanceUSD)}`;
+      document.getElementById('ws-withdrawable').textContent = fmt(w.withdrawable);
+      document.getElementById('ws-withdrawable-usd').textContent = `≈ ${fmtUSD(w.withdrawableUSD)}`;
+      document.getElementById('ws-held').innerHTML = w.held > 0
+        ? `~${fmt(w.held)} ${c} held against unsettled obligations <span class="label-icon">i</span>`
+        : 'Full balance available';
+      document.getElementById('withdraw-amount').value = '';
+      document.getElementById('withdraw-max').checked = false;
+      document.getElementById('withdraw-error').style.display = 'none';
+    }
+    function backToStep1() {
+      document.getElementById('withdraw-step-1').style.display = 'block';
+      document.getElementById('withdraw-step-2').style.display = 'none';
+    }
+    function closeWithdrawModal() { document.getElementById('withdraw-modal').classList.remove('active'); selectedWithdrawCurrency = null; }
+    function toggleWithdrawMax() {
+      if (document.getElementById('withdraw-max').checked && selectedWithdrawCurrency) {
+        document.getElementById('withdraw-amount').value = getWithdrawable(selectedWithdrawCurrency).withdrawable.toFixed(2);
+      }
+      updateWithdrawPreview();
+    }
+    function updateWithdrawPreview() {
+      const a = parseFloat(document.getElementById('withdraw-amount').value) || 0;
+      const { withdrawable } = getWithdrawable(selectedWithdrawCurrency);
+      const err = document.getElementById('withdraw-error');
+      if (a > withdrawable) { err.textContent = `Amount exceeds withdrawable balance. Maximum: ${fmt(withdrawable)} ${selectedWithdrawCurrency}`; err.style.display = 'block'; }
+      else { err.style.display = 'none'; }
+    }
+    function executeWithdraw() {
+      if (!selectedWithdrawCurrency) return;
+      const a = parseFloat(document.getElementById('withdraw-amount').value) || 0;
+      const { withdrawable } = getWithdrawable(selectedWithdrawCurrency);
+      if (a > 0 && a <= withdrawable) { balances[selectedWithdrawCurrency] -= a; closeWithdrawModal(); updateDisplay(); }
+    }
+
+    // Trade
+    function openTradeModal() {
+      document.getElementById('trade-modal').classList.add('active');
+      const sellSel = document.getElementById('sell-currency'), buySel = document.getElementById('buy-currency');
+      sellSel.innerHTML = Object.entries(CURRENCIES).map(([c, i]) => `<option value="${c}">${i.flag} ${c} - ${i.name}</option>`).join('');
+      buySel.innerHTML = Object.entries(CURRENCIES).map(([c, i]) => `<option value="${c}" ${c === 'USD' ? 'selected' : ''}>${i.flag} ${c} - ${i.name}</option>`).join('');
+      document.getElementById('sell-amount').value = '';
+      document.getElementById('trade-preview').style.display = 'none';
+      document.getElementById('trade-error').style.display = 'none';
+      document.getElementById('trade-error').textContent = '';
+    }
+    function closeTradeModal() { document.getElementById('trade-modal').classList.remove('active'); }
+    function updateTradePreview() {
+      const sc = document.getElementById('sell-currency').value, bc = document.getElementById('buy-currency').value;
+      const sa = parseFloat(document.getElementById('sell-amount').value) || 0;
+      const errEl = document.getElementById('trade-error');
+      errEl.style.display = 'none';
+      errEl.textContent = '';
+      if (sa > 0 && sc !== bc) {
+        const sellUsd = sa * rates[sc], buyAmt = sellUsd / rates[bc];
+        const availableToTrade = calculateTotals().availableToTrade;
+        if (sellUsd > availableToTrade) {
+          const maxSellAmount = availableToTrade / rates[sc];
+          errEl.textContent = `Sell amount exceeds available to trade. Maximum: ${fmtUSD(availableToTrade)} (≈ ${fmt(maxSellAmount)} ${sc})`;
+          errEl.style.display = 'block';
+        }
+        document.getElementById('sell-usd').textContent = `≈ ${fmtUSD(sellUsd)}`;
+        document.getElementById('trade-preview').style.display = 'block';
+        document.getElementById('tp-sell').textContent = `-${fmt(sa)} ${sc}`;
+        document.getElementById('tp-buy').textContent = `+${fmt(buyAmt)} ${bc}`;
+        document.getElementById('tp-rate').textContent = `Rate: 1 ${sc} = ${(rates[sc] / rates[bc]).toFixed(6)} ${bc}`;
+      } else {
+        document.getElementById('sell-usd').textContent = '';
+        document.getElementById('trade-preview').style.display = 'none';
+      }
+    }
+    function executeTrade() {
+      const sc = document.getElementById('sell-currency').value, bc = document.getElementById('buy-currency').value;
+      const sa = parseFloat(document.getElementById('sell-amount').value) || 0;
+      const errEl = document.getElementById('trade-error');
+      if (sa <= 0 || sc === bc) return;
+      const sellUsd = sa * rates[sc], buyAmt = sellUsd / rates[bc];
+      const availableToTrade = calculateTotals().availableToTrade;
+      if (sellUsd > availableToTrade) {
+        const maxSellAmount = availableToTrade / rates[sc];
+        errEl.textContent = `Sell amount exceeds available to trade. Maximum: ${fmtUSD(availableToTrade)} (≈ ${fmt(maxSellAmount)} ${sc})`;
+        errEl.style.display = 'block';
+        return;
+      }
+      errEl.style.display = 'none';
+      errEl.textContent = '';
+      balances[sc] -= sa; balances[bc] += buyAmt;
+      closeTradeModal(); updateDisplay();
+    }
+
+    // Edit
+    function openEditModal() {
+      editBalances = { ...balances };
+      document.getElementById('edit-modal').classList.add('active');
+      document.getElementById('edit-credit-limit').value = creditLimit;
+      const fields = document.getElementById('edit-fields');
+      fields.innerHTML = Object.entries(CURRENCIES).map(([c, i]) => `
+        <div class="edit-row">
+          <span class="edit-flag">${flagWrap(c, i.flag)}</span>
+          <span class="edit-code">${c}</span>
+          <input type="number" id="edit-${c}" class="form-input edit-input" value="${editBalances[c]}" oninput="onEditInput('${c}')">
+          <span id="edit-usd-${c}" class="edit-usd">${fmtUSD(editBalances[c] * rates[c])}</span>
+        </div>
+      `).join('');
+      updateEditPreview();
+    }
+    function closeEditModal() { document.getElementById('edit-modal').classList.remove('active'); }
+    function onEditInput(c) {
+      editBalances[c] = parseFloat(document.getElementById(`edit-${c}`).value) || 0;
+      const usd = editBalances[c] * rates[c];
+      const el = document.getElementById(`edit-usd-${c}`);
+      el.textContent = fmtUSD(usd);
+      el.className = `edit-usd ${usd < 0 ? 'negative' : ''}`;
+      updateEditPreview();
+    }
+    function updateEditPreview() {
+      let holdings = 0, obligations = 0;
+      Object.entries(editBalances).forEach(([c, a]) => {
+        const usd = (parseFloat(a) || 0) * rates[c];
+        if (usd >= 0) holdings += usd; else obligations += Math.abs(usd);
+      });
+      const equity = holdings - obligations;
+      const cl = parseFloat(document.getElementById('edit-credit-limit').value) || 0;
+      const used = obligations - holdings;
+      const available = cl - used;
+      const eqEl = document.getElementById('preview-equity');
+      eqEl.textContent = fmtUSD(equity);
+      eqEl.className = `edit-preview-value ${equity < 0 ? 'negative' : ''}`;
+      document.getElementById('preview-available').textContent = fmtUSD(available);
+    }
+    function saveBalances() {
+      Object.keys(CURRENCIES).forEach(c => { balances[c] = parseFloat(document.getElementById(`edit-${c}`).value) || 0; });
+      creditLimit = parseFloat(document.getElementById('edit-credit-limit').value) || 0;
+      closeEditModal(); updateDisplay();
+    }
+
+    // Init
+    document.addEventListener('DOMContentLoaded', () => { refreshRates(); updateDisplay(); });
+    document.getElementById('edit-credit-limit')?.addEventListener('input', updateEditPreview);
+  </script>
+</body>
+</html>
