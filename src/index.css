@@ -35,10 +35,11 @@ body {
   color: var(--color-grey-900);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
-.container {
-  max-width: 1064px;
+.app-container {
+  max-width: 1020px;
   margin: 0 auto;
   padding: var(--spacing-3xl) var(--spacing-xl);
 }
@@ -53,6 +54,24 @@ body {
   align-items: center;
   gap: 8px;
 }
+
+.tab-nav {
+  display: flex;
+  gap: var(--spacing-l);
+  margin-bottom: var(--spacing-xl);
+}
+.tab-btn {
+  font-family: var(--font-inter);
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 28px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+}
+.tab-btn--active { color: var(--color-grey-900); }
+.tab-btn--inactive { color: #9ca3af; }
 .title-loader {
   display: inline-flex;
   align-items: center;
@@ -387,14 +406,7 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  align-items: flex-end;
 }
-.table-cell:first-child {
-  text-align: left;
-  align-items: flex-start;
-}
-.table-cell:not(:first-child) { text-align: right; }
-.table-cell.rate-cell { text-align: right; }
 
 .currency-cell { display: flex; align-items: center; gap: var(--spacing-l); }
 .currency-flag-wrap { display: inline-flex; align-items: center; width: 24px; }
@@ -1350,7 +1362,7 @@ body {
   padding-right: 48px;
   transition: flex 0.3s cubic-bezier(.215, .61, .355, 1);
 }
-.app-main .container {
+.app-main .app-container {
   transition: padding 0.3s cubic-bezier(.215, .61, .355, 1);
 }
 
@@ -1575,6 +1587,9 @@ body {
    Model switcher tabs – thin bar at top of page
    ═══════════════════════════════════════════════ */
 .model-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   align-items: stretch;
   gap: 0;
@@ -1615,9 +1630,9 @@ body {
   border-radius: 50%;
   flex-shrink: 0;
 }
-.model-tab-dot--a { background: var(--color-grey-400); }
-.model-tab-dot--b { background: var(--color-green-600); }
-.model-tab-dot--c { background: var(--color-grey-700); }
+.model-tab-dot--a { background: #c4b5fd; } /* lavender */
+.model-tab-dot--b { background: #c4b5fd; } /* lavender */
+.model-tab-dot--c { background: #c4b5fd; } /* lavender */
 
 @media (max-width: 640px) {
   .metrics-section { grid-template-columns: 1fr; gap: 24px; }
