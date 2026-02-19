@@ -4,7 +4,6 @@ import { getCurrencyFlag } from "./CurrencyFlags";
 import { motion, AnimatePresence } from "motion/react";
 import { useEffect, useState } from "react";
 import { useCurrenciesStore } from "../../stores/useCurrenciesStore";
-import { isSwappable } from "../../constants/swapRestrictions";
 
 interface CurrencyModalProps {
   isOpen: boolean;
@@ -21,6 +20,7 @@ interface CurrencyModalProps {
     to: string,
     reference: "buy" | "sell"
   ) => Promise<number>;
+  disabledCurrencies?: Record<string, boolean>;
 }
 
 interface Currency {
@@ -199,8 +199,12 @@ export function CurrencyModal({
   balances,
   formatBalance,
   convertCurrency,
+  disabledCurrencies,
 }: CurrencyModalProps) {
-  const currencies = useCurrenciesStore((s) => s.currencies);
+  const allCurrencies = useCurrenciesStore((s) => s.currencies);
+  const currencies = disabledCurrencies
+    ? allCurrencies.filter((c) => !disabledCurrencies[c.code])
+    : allCurrencies;
   const loading = useCurrenciesStore((s) => s.loading);
   const fetchIfNeeded = useCurrenciesStore((s) => s.fetchIfNeeded);
 
@@ -214,21 +218,8 @@ export function CurrencyModal({
     });
   }, [balances, formatBalance, convertCurrency, fetchIfNeeded]);
 
-  // Split currencies into swappable and non-swappable based on opposite currency
-  const swappableCurrencies: Currency[] = [];
-  const nonSwappableCurrencies: Currency[] = [];
-
-  currencies.forEach((currency) => {
-    if (!oppositeCurrency || isSwappable(currency.code, oppositeCurrency)) {
-      swappableCurrencies.push(currency);
-    } else {
-      nonSwappableCurrencies.push(currency);
-    }
-  });
-
-  // Recent section: only show swappable currencies
-  const recentCurrencies = swappableCurrencies.slice(0, 3);
-  const allSwappableCurrencies = swappableCurrencies.slice(3);
+  const recentCurrencies = currencies.slice(0, 3);
+  const allOtherCurrencies = currencies.slice(3);
 
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLowerCase();
@@ -238,27 +229,19 @@ export function CurrencyModal({
     c.name.toLowerCase().includes(normalizedQuery);
 
   const filteredRecent = recentCurrencies.filter(matches);
-  const filteredAllSwappable = allSwappableCurrencies.filter(matches);
-  const filteredNonSwappable = nonSwappableCurrencies.filter(matches);
-  const hasResults =
-    filteredRecent.length > 0 ||
-    filteredAllSwappable.length > 0 ||
-    filteredNonSwappable.length > 0;
+  const filteredAll = allOtherCurrencies.filter(matches);
+  const hasResults = filteredRecent.length > 0 || filteredAll.length > 0;
 
-  const handleCurrencyClick = (currencyCode: string, isNonSwappable: boolean) => {
-    if (isNonSwappable) {
-      onNonSwappableClick(currencyCode);
-    } else {
-      onCurrencySelect(currencyCode);
-      onClose();
-    }
+  const handleCurrencyClick = (currencyCode: string) => {
+    onCurrencySelect(currencyCode);
+    onClose();
   };
 
   return createPortal(
     <AnimatePresence initial={false} mode="wait">
       {isOpen && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-end justify-center"
+          className="fixed inset-0 z-50 flex items-end justify-center overscroll-none"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -289,17 +272,17 @@ export function CurrencyModal({
           >
             <div className="bg-white rounded-[12px] shadow-2xl border-[#efefef] border-[0.5px] h-full flex flex-col overflow-hidden">
               {/* Fixed Header and Search Section */}
-              <div className="flex-shrink-0 px-[16px] pt-[16px]">
+              <div className="flex-shrink-0 px-[16px]">
                 {/* Header */}
-                <div className="flex items-center justify-between w-full mb-4">
-                  <h2 className="text-[18px] font-normal text-[#1c1c1c] leading-[24px]">
+                <div className="h-[66px] flex items-center justify-between">
+                  <h2 className="text-[20px] font-medium text-[#1c1c1c]">
                     Select an asset to {type}
                   </h2>
                   <button
                     onClick={onClose}
-                    className="p-1 hover:bg-gray-100 rounded transition-colors cursor-pointer"
+                    className="bg-white border-[0.5px] border-[rgba(28,28,28,0.05)] p-[9px] rounded-[12px] shadow-[0px_0.5px_0px_0.4px_rgba(32,32,32,0.1)] hover:bg-[#f9f9f9] transition-colors cursor-pointer flex items-center justify-center"
                   >
-                    <X className="h-4 w-4 text-[#999999]" />
+                    <X className="h-4 w-4 text-[#7b7b7b]" />
                   </button>
                 </div>
 
@@ -322,7 +305,7 @@ export function CurrencyModal({
               </div>
 
               {/* Scrollable Currency List Section */}
-              <div className="flex-1 overflow-y-scroll currency-modal-scroll px-[16px] pt-2">
+              <div className="flex-1 overflow-y-scroll overscroll-none currency-modal-scroll px-[16px] pt-2">
                   {loading && currencies.length === 0 ? (
                     // Shimmer/Skeleton Loader
                     <div className="space-y-0">
@@ -375,9 +358,7 @@ export function CurrencyModal({
                                   <div className="border-t border-[#F0F0F0]" />
                                 )}
                                 <button
-                                  onClick={() =>
-                                    handleCurrencyClick(currency.code, false)
-                                  }
+                                  onClick={() => handleCurrencyClick(currency.code)}
                                   className="w-full px-2 py-3 hover:bg-gray-50 transition-colors cursor-pointer"
                                 >
                                   <div className="flex items-center justify-between">
@@ -419,8 +400,8 @@ export function CurrencyModal({
                         </div>
                       )}
 
-                      {/* All Swappable Assets Section */}
-                      {filteredAllSwappable.length > 0 && (
+                      {/* All Assets Section */}
+                      {filteredAll.length > 0 && (
                         <div>
                           <div className="px-2 mb-2">
                             <p className="text-[13px] font-medium text-[#999999] leading-[18px]">
@@ -428,15 +409,13 @@ export function CurrencyModal({
                             </p>
                           </div>
                           <div className="space-y-0">
-                            {filteredAllSwappable.map((currency, index) => (
+                            {filteredAll.map((currency, index) => (
                               <div key={currency.code}>
                                 {index > 0 && (
                                   <div className="border-t border-[#F0F0F0]" />
                                 )}
                                 <button
-                                  onClick={() =>
-                                    handleCurrencyClick(currency.code, false)
-                                  }
+                                  onClick={() => handleCurrencyClick(currency.code)}
                                   className="w-full px-2 py-3 hover:bg-gray-50 transition-colors cursor-pointer"
                                 >
                                   <div className="flex items-center justify-between">
@@ -452,65 +431,18 @@ export function CurrencyModal({
                                       </div>
                                     </div>
                                     <div className="text-right">
-                                      <div className="text-[13px] font-semibold text-[#1c1c1c] leading-[18px]">
+                                      <div
+                                        className={`text-[13px] font-semibold leading-[18px] ${
+                                          currency.isNegative
+                                            ? "text-[#e95c5c]"
+                                            : "text-[#1c1c1c]"
+                                        }`}
+                                      >
                                         {currency.balance}
                                       </div>
                                       {currency.usdValue && (
                                         <div
                                           className="text-[13px] font-normal text-[#676767] leading-[16px]"
-                                          title="USD Equivalent"
-                                        >
-                                          {currency.usdValue}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Non-Swappable Assets Section - Only show if there are non-swappable currencies and opposite currency is selected */}
-                      {filteredNonSwappable.length > 0 && oppositeCurrency && (
-                        <div className="mt-4">
-                          <div className="px-2 mb-2">
-                            <p className="text-[13px] font-medium text-[#999999] leading-[18px]">
-                              Not swappable against {oppositeCurrency}
-                            </p>
-                          </div>
-                          <div className="space-y-0">
-                            {filteredNonSwappable.map((currency, index) => (
-                              <div key={currency.code}>
-                                {index > 0 && (
-                                  <div className="border-t border-[#F0F0F0]" />
-                                )}
-                                <button
-                                  onClick={() =>
-                                    handleCurrencyClick(currency.code, true)
-                                  }
-                                  className="w-full px-2 py-3 hover:bg-gray-50 transition-colors cursor-not-allowed opacity-50"
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-4">
-                                      {getCurrencyFlag(currency.code)}
-                                      <div className="text-left">
-                                        <div className="text-[13px] font-semibold text-[#9ca3af] uppercase leading-[18px]">
-                                          {currency.code}
-                                        </div>
-                                        <div className="text-[13px] font-normal text-[#9ca3af] leading-[18px]">
-                                          {currency.name}
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="text-right">
-                                      <div className="text-[13px] font-semibold text-[#9ca3af] leading-[18px]">
-                                        {currency.balance}
-                                      </div>
-                                      {currency.usdValue && (
-                                        <div
-                                          className="text-[13px] font-normal text-[#9ca3af] leading-[16px]"
                                           title="USD Equivalent"
                                         >
                                           {currency.usdValue}

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef } from "react";
+import { NumericFormat, NumberFormatValues, SourceInfo } from "react-number-format";
 import { Input } from "../ui-tw/input";
 import {
   Select,
@@ -54,7 +55,11 @@ interface TradingWidgetProps {
   model?: string;
 }
 
-export function TradingWidget({
+export interface TradingWidgetHandle {
+  focusBuy: () => void;
+}
+
+export const TradingWidget = forwardRef<TradingWidgetHandle, TradingWidgetProps>(function TradingWidget({
   onTradeExecuted,
   balances: externalBalances,
   rates: externalRates,
@@ -62,7 +67,7 @@ export function TradingWidget({
   totals,
   disabledCurrencies,
   model = 'A',
-}: TradingWidgetProps) {
+}, ref) {
   const [buyAmount, setBuyAmount] = useState<string>("0");
   const [sellAmount, setSellAmount] = useState<string>("0");
   const [buyCurrency, setBuyCurrency] = useState<string>("USD");
@@ -131,19 +136,11 @@ export function TradingWidget({
   const [isBuyFocused, setIsBuyFocused] = useState(false);
   const [isSellFocused, setIsSellFocused] = useState(false);
 
-  // Track raw input values for editable display
-  const [buyInputValue, setBuyInputValue] = useState<string>("");
-  const [sellInputValue, setSellInputValue] = useState<string>("");
-
   // Temporary cooldown to prevent rapid re-clicks on execute when refreshing quotes
   const [isExecuteCooldownActive, setIsExecuteCooldownActive] = useState(false);
   const executeCooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
-
-  // Track free editing mode (when user deletes commas)
-  const [isBuyFreeEditing, setIsBuyFreeEditing] = useState(false);
-  const [isSellFreeEditing, setIsSellFreeEditing] = useState(false);
 
   // Track keyboard focus for visual feedback on hotkeys
   const [isBuyKeyboardFocused, setIsBuyKeyboardFocused] = useState(false);
@@ -212,9 +209,9 @@ export function TradingWidget({
   const buyInputRef = useRef<HTMLInputElement>(null);
   const sellInputRef = useRef<HTMLInputElement>(null);
 
-  // Track key events for better comma deletion detection
-  const [lastKeyPressed, setLastKeyPressed] = useState<string>("");
-  const [cursorBeforeKeypress, setCursorBeforeKeypress] = useState<number>(0);
+  useImperativeHandle(ref, () => ({
+    focusBuy: () => buyInputRef.current?.focus(),
+  }));
 
   // Debounce the input values
   const debouncedBuyAmount = useDebounce(buyAmount, 800);
@@ -485,107 +482,6 @@ export function TradingWidget({
     return amountNum >= 100;
   };
 
-  // Calculate new cursor position after formatting changes
-  const calculateNewCursorPosition = (
-    oldValue: string,
-    newValue: string,
-    oldCursorPos: number
-  ) => {
-    // If values are the same, keep cursor position
-    if (oldValue === newValue) return oldCursorPos;
-
-    // Remove commas from both values to get clean comparison
-    const oldClean = oldValue.replace(/,/g, "");
-    const newClean = newValue.replace(/,/g, "");
-
-    // Count commas before cursor position in old value
-    const commasBeforeCursor = (
-      oldValue.substring(0, oldCursorPos).match(/,/g) || []
-    ).length;
-
-    // Find position in clean value (without commas)
-    const cleanCursorPos = oldCursorPos - commasBeforeCursor;
-
-    // Now find the corresponding position in the new formatted value
-    let newCursorPos = 0;
-    let cleanCharCount = 0;
-
-    for (let i = 0; i < newValue.length; i++) {
-      if (newValue[i] === ",") {
-        newCursorPos++;
-        continue;
-      }
-
-      if (cleanCharCount >= cleanCursorPos) {
-        break;
-      }
-
-      newCursorPos++;
-      cleanCharCount++;
-    }
-
-    // Make sure cursor doesn't end up on a comma
-    if (newValue[newCursorPos] === ",") {
-      newCursorPos++;
-    }
-
-    return Math.min(newCursorPos, newValue.length);
-  };
-
-  // Format number with commas while preserving editability
-  const formatWithCommas = (value: string) => {
-    if (!value || value === "") return "";
-
-    // Handle cases where value starts with decimal point
-    if (value === ".") return ".";
-    if (value.startsWith(".")) return "0" + value;
-
-    // Split into integer and decimal parts
-    const parts = value.split(".");
-    const integerPart = parts[0] || "";
-    const decimalPart = parts[1];
-
-    // Don't add commas to empty integer part
-    if (!integerPart) return decimalPart !== undefined ? `.${decimalPart}` : "";
-
-    // Add commas to integer part
-    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-
-    // Combine parts
-    return decimalPart !== undefined
-      ? `${formattedInteger}.${decimalPart}`
-      : formattedInteger;
-  };
-
-  // Get display value with real-time comma formatting
-  const getDisplayValue = (
-    amount: string,
-    currencyCode: string,
-    isFocused: boolean,
-    inputValue: string,
-    isFreeEditing: boolean
-  ) => {
-    // If amount is empty or zero, return empty string to show placeholder
-    if (!amount || amount === "" || amount === "0") {
-      return "";
-    }
-
-    if (isFocused) {
-      if (isFreeEditing && inputValue) {
-        // When in free editing mode, show the raw input value to allow comma deletion
-        return inputValue;
-      } else if (inputValue) {
-        // When focused and we have an inputValue, show it (should be formatted)
-        return inputValue;
-      } else {
-        // Fallback to formatted amount
-        return formatWithCommas(amount);
-      }
-    }
-    // When not focused, show fully formatted value with proper precision
-    return formatAmount(amount, currencyCode);
-  };
-
   const formatBalance = (amount: number, currencyCode: string) => {
     const currency = getCurrencyByCode(currencyCode);
     const precision = currency?.precision || 2;
@@ -778,8 +674,6 @@ export function TradingWidget({
       }
 
       setIsShimmeringSell(false);
-      setIsBuyFreeEditing(false);
-      setBuyInputValue("");
       startTimer();
       startNudgeTimer();
     }, 1200);
@@ -872,8 +766,6 @@ export function TradingWidget({
       }
 
       setIsShimmeringBuy(false);
-      setIsSellFreeEditing(false);
-      setSellInputValue("");
       startTimer();
       startNudgeTimer();
     }, 1200);
@@ -885,88 +777,13 @@ export function TradingWidget({
     };
   }, [debouncedSellAmount, lastEditedField, buyCurrency, sellCurrency]);
 
-  const handleBuyAmountChange = (value: string) => {
-    // Pause timer while user is editing
+  const handleBuyAmountChange = ({ value }: NumberFormatValues, sourceInfo: SourceInfo) => {
+    if (sourceInfo.source !== "event") return;
     pauseTimer();
-
-    // Get cursor position before processing
-    const input = buyInputRef.current;
-    const cursorPosition = input?.selectionStart || 0;
-    const oldValue = input?.value || "";
-
-    // Remove commas for processing first
-    let cleanValue = value.replace(/,/g, "");
-
-    // Only allow valid number input (digits and one decimal point)
-    if (cleanValue !== "" && !/^\d*\.?\d*$/.test(cleanValue)) {
-      return; // Invalid input, don't process
-    }
-
-    // Enhanced comma deletion detection
-    const oldCommaCount = (oldValue.match(/,/g) || []).length;
-    const newCommaCount = (value.match(/,/g) || []).length;
-    const oldDigits = oldValue.replace(/[^0-9.]/g, "");
-    const newDigits = value.replace(/[^0-9.]/g, "");
-
-    // Check if user pressed backspace/delete on a comma
-    const isBackspaceOnComma =
-      (lastKeyPressed === "Backspace" || lastKeyPressed === "Delete") &&
-      oldValue.length > 0 &&
-      oldValue === value;
-    console.log(
-      "=======>",
-      oldValue[cursorBeforeKeypress - 1],
-      oldValue[cursorBeforeKeypress + 1],
-      oldValue[cursorBeforeKeypress - 2],
-      oldValue
-    );
-
-    // Check if commas were deleted while digits remain the same
-    const isCommaDeleted =
-      oldCommaCount > newCommaCount &&
-      oldDigits === newDigits &&
-      oldDigits.length > 0;
-
-    // Check if user manually removed formatting (typed over commas)
-    const shouldEnterFreeEdit = isBackspaceOnComma || isCommaDeleted;
-
-    if (shouldEnterFreeEdit) {
-      console.log(
-        "🎯 Free editing mode activated - comma manipulation detected"
-      );
-      console.log("Details:", {
-        isBackspaceOnComma,
-        isCommaDeleted,
-        lastKeyPressed,
-        cursorBeforeKeypress,
-      });
-      setIsBuyFreeEditing(true);
-      setBuyInputValue(value);
-      setBuyAmount(cleanValue);
-      setLastEditedField("buy");
-
-      // Check trading limit validation immediately
-      if (cleanValue && !isNaN(Number(cleanValue)) && Number(cleanValue) > 0) {
-        if (
-          !checkTradingLimit(sellAmount, sellCurrency, cleanValue, buyCurrency)
-        ) {
-          setTradingLimitError(true);
-        } else {
-          setTradingLimitError(false);
-        }
-      }
-      return;
-    }
-
-    // Update the amount state
-    setBuyAmount(cleanValue);
+    setBuyAmount(value);
     setLastEditedField("buy");
-
-    // Check trading limit validation immediately
-    if (cleanValue && !isNaN(Number(cleanValue)) && Number(cleanValue) > 0) {
-      if (
-        !checkTradingLimit(sellAmount, sellCurrency, cleanValue, buyCurrency)
-      ) {
+    if (value && !isNaN(Number(value)) && Number(value) > 0) {
+      if (!checkTradingLimit(sellAmount, sellCurrency, value, buyCurrency)) {
         setTradingLimitError(true);
       } else {
         setTradingLimitError(false);
@@ -974,129 +791,20 @@ export function TradingWidget({
     } else {
       setTradingLimitError(false);
     }
-
-    if (isBuyFreeEditing) {
-      // In free editing mode, store raw input
-      setBuyInputValue(value);
-    } else {
-      // Normal mode - format with commas and preserve cursor position
-      const formattedValue = formatWithCommas(cleanValue);
-      setBuyInputValue(formattedValue);
-
-      setTimeout(() => {
-        if (input && isBuyFocused) {
-          const newCursorPos = calculateNewCursorPosition(
-            oldValue,
-            formattedValue,
-            cursorPosition
-          );
-          input.setSelectionRange(newCursorPos, newCursorPos);
-        }
-      }, 0);
-    }
   };
 
-  const handleSellAmountChange = (value: string) => {
-    // Pause timer while user is editing
+  const handleSellAmountChange = ({ value }: NumberFormatValues, sourceInfo: SourceInfo) => {
+    if (sourceInfo.source !== "event") return;
     pauseTimer();
-
-    // Get cursor position before processing
-    const input = sellInputRef.current;
-    const cursorPosition = input?.selectionStart || 0;
-    const oldValue = input?.value || "";
-
-    // Remove commas for processing first
-    let cleanValue = value.replace(/,/g, "");
-
-    // Only allow valid number input (digits and one decimal point)
-    if (cleanValue !== "" && !/^\d*\.?\d*$/.test(cleanValue)) {
-      return; // Invalid input, don't process
-    }
-
-    // Enhanced comma deletion detection
-    const oldCommaCount = (oldValue.match(/,/g) || []).length;
-    const newCommaCount = (value.match(/,/g) || []).length;
-    const oldDigits = oldValue.replace(/[^0-9.]/g, "");
-    const newDigits = value.replace(/[^0-9.]/g, "");
-
-    // Check if user pressed backspace/delete on a comma
-    const isBackspaceOnComma =
-      (lastKeyPressed === "Backspace" || lastKeyPressed === "Delete") &&
-      oldValue.length > 0 &&
-      oldValue === value;
-    console.log(
-      "=======>",
-      oldValue[cursorBeforeKeypress - 1],
-      oldValue[cursorBeforeKeypress + 1],
-      oldValue[cursorBeforeKeypress - 2],
-      oldValue
-    );
-
-    // Check if commas were deleted while digits remain the same
-    const isCommaDeleted =
-      oldCommaCount > newCommaCount &&
-      oldDigits === newDigits &&
-      oldDigits.length > 0;
-
-    // Check if user manually removed formatting (typed over commas)
-    const shouldEnterFreeEdit = isBackspaceOnComma || isCommaDeleted;
-
-    if (shouldEnterFreeEdit) {
-      console.log(
-        "🎯 Free editing mode activated - comma manipulation detected"
-      );
-      console.log("Details:", {
-        isBackspaceOnComma,
-        isCommaDeleted,
-        lastKeyPressed,
-        cursorBeforeKeypress,
-      });
-      setIsSellFreeEditing(true);
-      setSellInputValue(value);
-      setSellAmount(cleanValue);
-      setLastEditedField("sell");
-
-      // Check validations immediately for free editing
-      if (cleanValue && !isNaN(Number(cleanValue)) && Number(cleanValue) > 0) {
-        // Check balance validation
-        if (!checkSellAmountValidity(cleanValue, sellCurrency)) {
-          setSellAmountError(true);
-        } else {
-          setSellAmountError(false);
-        }
-
-        // Check trading limit validation
-        if (
-          !checkTradingLimit(cleanValue, sellCurrency, buyAmount, buyCurrency)
-        ) {
-          setTradingLimitError(true);
-        } else {
-          setTradingLimitError(false);
-        }
-      } else {
-        setSellAmountError(false);
-        setTradingLimitError(false);
-      }
-      return;
-    }
-
-    // Update the amount state
-    setSellAmount(cleanValue);
+    setSellAmount(value);
     setLastEditedField("sell");
-
-    // Check validations immediately on sell amount change
-    if (cleanValue && !isNaN(Number(cleanValue)) && Number(cleanValue) > 0) {
-      // Check balance validation
-      if (!checkSellAmountValidity(cleanValue, sellCurrency)) {
+    if (value && !isNaN(Number(value)) && Number(value) > 0) {
+      if (!checkSellAmountValidity(value, sellCurrency)) {
         setSellAmountError(true);
       } else {
         setSellAmountError(false);
       }
-
-      // Check trading limit validation
-      if (
-        !checkTradingLimit(cleanValue, sellCurrency, buyAmount, buyCurrency)
-      ) {
+      if (!checkTradingLimit(value, sellCurrency, buyAmount, buyCurrency)) {
         setTradingLimitError(true);
       } else {
         setTradingLimitError(false);
@@ -1105,45 +813,16 @@ export function TradingWidget({
       setSellAmountError(false);
       setTradingLimitError(false);
     }
-
-    if (isSellFreeEditing) {
-      // In free editing mode, store raw input
-      setSellInputValue(value);
-    } else {
-      // Normal mode - format with commas and preserve cursor position
-      const formattedValue = formatWithCommas(cleanValue);
-      setSellInputValue(formattedValue);
-
-      setTimeout(() => {
-        if (input && isSellFocused) {
-          const newCursorPos = calculateNewCursorPosition(
-            oldValue,
-            formattedValue,
-            cursorPosition
-          );
-          input.setSelectionRange(newCursorPos, newCursorPos);
-        }
-      }, 0);
-    }
   };
 
   const handleBuyFocus = () => {
     setIsBuyFocused(true);
-    // Clear keyboard focus when manually focusing
     setIsBuyKeyboardFocused(false);
-    // Set input value to formatted value with commas when focusing (if not already set)
-    if (!buyInputValue && buyAmount && buyAmount !== "0") {
-      setBuyInputValue(formatWithCommas(buyAmount));
-    }
   };
 
   const handleBuyBlur = () => {
     setIsBuyFocused(false);
     setIsBuyKeyboardFocused(false);
-    // Exit free editing mode and clear input value
-    setIsBuyFreeEditing(false);
-    setBuyInputValue("");
-    // Clean up the value when focus is lost, but only if the numeric value changes
     const num = Number(buyAmount);
     if (!isNaN(num) && num >= 0) {
       const currency = getCurrencyByCode(buyCurrency);
@@ -1160,21 +839,12 @@ export function TradingWidget({
 
   const handleSellFocus = () => {
     setIsSellFocused(true);
-    // Clear keyboard focus when manually focusing
     setIsSellKeyboardFocused(false);
-    // Set input value to formatted value with commas when focusing (if not already set)
-    if (!sellInputValue && sellAmount && sellAmount !== "0") {
-      setSellInputValue(formatWithCommas(sellAmount));
-    }
   };
 
   const handleSellBlur = () => {
     setIsSellFocused(false);
     setIsSellKeyboardFocused(false);
-    // Exit free editing mode and clear input value
-    setIsSellFreeEditing(false);
-    setSellInputValue("");
-    // Clean up the value when focus is lost, but only if the numeric value changes
     const num = Number(sellAmount);
     if (!isNaN(num) && num >= 0) {
       const currency = getCurrencyByCode(sellCurrency);
@@ -1424,12 +1094,8 @@ export function TradingWidget({
     // Reset to new values for next trade
     setBuyAmount("0");
     setSellAmount("0");
-    setBuyInputValue("");
-    setSellInputValue("");
     setIsBuyFocused(false);
     setIsSellFocused(false);
-    setIsBuyFreeEditing(false);
-    setIsSellFreeEditing(false);
     setLastEditedField(null);
     setSellAmountError(false);
     setTradingLimitError(false);
@@ -1533,10 +1199,6 @@ export function TradingWidget({
           updateExchangeRateAndPair();
         }
         setIsShimmeringSell(false);
-        // Exit free edit mode after quote refresh
-        setIsBuyFreeEditing(false);
-        setBuyInputValue("");
-        // Reset quote timer after new quote is presented to user
         startTimer();
         startNudgeTimer();
       }, 1200);
@@ -1586,10 +1248,6 @@ export function TradingWidget({
           updateExchangeRateAndPair();
         }
         setIsShimmeringBuy(false);
-        // Exit free edit mode after quote refresh
-        setIsSellFreeEditing(false);
-        setSellInputValue("");
-        // Reset quote timer after new quote is presented to user
         startTimer();
         startNudgeTimer();
       }, 1200);
@@ -1781,7 +1439,7 @@ export function TradingWidget({
   };
 
   return (
-    <div className="relative w-full max-w-2xl mx-auto mt-[32px] sm:mt-[64px]">
+    <div className="relative w-full max-w-2xl mt-[24px]">
       {/* Bookmark Tabs */}
       <BookmarkTabs
         bookmarks={bookmarks}
@@ -1870,37 +1528,17 @@ export function TradingWidget({
                 <ShimmerText
                   isShimmering={isShimmeringBuy}
                   className="flex-1"
-                  textValue={getDisplayValue(
-                    buyAmount,
-                    buyCurrency,
-                    isBuyFocused,
-                    buyInputValue,
-                    isBuyFreeEditing
-                  )}
+                  textValue={buyAmount !== "0" && buyAmount !== "" ? buyAmount : ""}
                   placeholderText="Fetching quote..."
                 >
-                  <Input
-                    ref={buyInputRef}
-                    value={getDisplayValue(
-                      buyAmount,
-                      buyCurrency,
-                      isBuyFocused,
-                      buyInputValue,
-                      isBuyFreeEditing
-                    )}
-                    onChange={(e) => handleBuyAmountChange(e.target.value)}
-                    onKeyDown={(e) => {
-                      setLastKeyPressed(e.key);
-                      setCursorBeforeKeypress(
-                        e.currentTarget.selectionStart || 0
-                      );
-                      console.log(
-                        "🔑 Key pressed on buy field:",
-                        e.key,
-                        "cursor at:",
-                        e.currentTarget.selectionStart
-                      );
-                    }}
+                  <NumericFormat
+                    getInputRef={buyInputRef}
+                    customInput={Input}
+                    value={buyAmount !== "0" && buyAmount !== "" ? buyAmount : ""}
+                    onValueChange={handleBuyAmountChange}
+                    thousandSeparator=","
+                    decimalSeparator="."
+                    allowNegative={false}
                     onFocus={handleBuyFocus}
                     onBlur={handleBuyBlur}
                     inputMode="decimal"
@@ -1979,7 +1617,7 @@ export function TradingWidget({
                   <span className="flex items-center gap-2">
                     {formatHumanReadable(buyAmount, buyCurrency) || "You buy"}
                     {showBuyMinTradeError && (
-                      <span className="text-[rgba(242,120,119,1)] text-[11px] font-medium">
+                      <span className="text-destructive text-[13px] font-medium">
                         Trades below 100 {buyCurrency} are not allowed
                       </span>
                     )}
@@ -2026,37 +1664,17 @@ export function TradingWidget({
                 <ShimmerText
                   isShimmering={isShimmeringSell}
                   className="flex-1"
-                  textValue={getDisplayValue(
-                    sellAmount,
-                    sellCurrency,
-                    isSellFocused,
-                    sellInputValue,
-                    isSellFreeEditing
-                  )}
+                  textValue={sellAmount !== "0" && sellAmount !== "" ? sellAmount : ""}
                   placeholderText="Fetching quote..."
                 >
-                  <Input
-                    ref={sellInputRef}
-                    value={getDisplayValue(
-                      sellAmount,
-                      sellCurrency,
-                      isSellFocused,
-                      sellInputValue,
-                      isSellFreeEditing
-                    )}
-                    onChange={(e) => handleSellAmountChange(e.target.value)}
-                    onKeyDown={(e) => {
-                      setLastKeyPressed(e.key);
-                      setCursorBeforeKeypress(
-                        e.currentTarget.selectionStart || 0
-                      );
-                      console.log(
-                        "🔑 Key pressed on sell field:",
-                        e.key,
-                        "cursor at:",
-                        e.currentTarget.selectionStart
-                      );
-                    }}
+                  <NumericFormat
+                    getInputRef={sellInputRef}
+                    customInput={Input}
+                    value={sellAmount !== "0" && sellAmount !== "" ? sellAmount : ""}
+                    onValueChange={handleSellAmountChange}
+                    thousandSeparator=","
+                    decimalSeparator="."
+                    allowNegative={false}
                     onFocus={handleSellFocus}
                     onBlur={handleSellBlur}
                     inputMode="decimal"
@@ -2138,12 +1756,12 @@ export function TradingWidget({
                     {formatHumanReadable(sellAmount, sellCurrency) ||
                       "You sell"}
                     {sellAmountError && (
-                      <span className="text-[rgba(242,120,119,1)] text-[13px] font-medium">
+                      <span className="text-destructive text-[13px] font-medium">
                         Exceeds your {sellCurrency} balance and credit
                       </span>
                     )}
                     {showSellMinTradeError && (
-                      <span className="text-[rgba(242,120,119,1)] text-[11px] font-medium">
+                      <span className="text-destructive text-[13px] font-medium">
                         Trades below 100 {sellCurrency} are not allowed
                       </span>
                     )}
@@ -2343,7 +1961,18 @@ export function TradingWidget({
                     transition={{ duration: 0.2, ease: "easeInOut" }}
                     className="flex items-center justify-center gap-2"
                   >
-                    <RefreshIcon className="h-4 w-4 text-[#4CBB84] flex-shrink-0" />
+                    <RefreshIcon
+                      className={`h-4 w-4 flex-shrink-0 ${
+                        isShimmeringBuy ||
+                        isShimmeringSell ||
+                        sellAmountError ||
+                        showBuyMinTradeError ||
+                        showSellMinTradeError ||
+                        isExecuteCooldownActive
+                          ? "text-[#4CBB84]"
+                          : "text-white"
+                      }`}
+                    />
                     <span style={{ fontWeight: 600 }}>Refresh quote</span>
                   </motion.div>
                 ) : (
@@ -2374,6 +2003,7 @@ export function TradingWidget({
         balances={balances}
         formatBalance={formatBalance}
         convertCurrency={convertCurrency}
+        disabledCurrencies={disabledCurrencies}
       />
 
       <LimitOrderSheet
@@ -2398,4 +2028,4 @@ export function TradingWidget({
       />
     </div>
   );
-}
+});

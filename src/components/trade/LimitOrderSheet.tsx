@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { NumericFormat, NumberFormatValues, SourceInfo } from 'react-number-format';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import 'number-flow';
 import { Button } from '../ui-tw/button';
@@ -87,18 +89,6 @@ export function LimitOrderSheet({
   // Track which field is currently being edited (focused)
   const [isBuyFocused, setIsBuyFocused] = useState(false);
   const [isSellFocused, setIsSellFocused] = useState(false);
-
-  // Track raw input values for editable display
-  const [buyInputValue, setBuyInputValue] = useState<string>("");
-  const [sellInputValue, setSellInputValue] = useState<string>("");
-
-  // Track free editing mode (when user deletes commas)
-  const [isBuyFreeEditing, setIsBuyFreeEditing] = useState(false);
-  const [isSellFreeEditing, setIsSellFreeEditing] = useState(false);
-
-  // Track key events for better comma deletion detection
-  const [lastKeyPressed, setLastKeyPressed] = useState<string>("");
-  const [cursorBeforeKeypress, setCursorBeforeKeypress] = useState<number>(0);
 
   // Refs to track cursor position
   const buyInputRef = useRef<HTMLInputElement>(null);
@@ -200,108 +190,6 @@ export function LimitOrderSheet({
     if (limitPriceFlowRef.current) {
       // @ts-expect-error - custom element API
       limitPriceFlowRef.current.update(currentMarketRate);
-    }
-  };
-
-  // Calculate new cursor position after formatting changes
-  const calculateNewCursorPosition = (
-    oldValue: string,
-    newValue: string,
-    oldCursorPos: number
-  ) => {
-    // If values are the same, keep cursor position
-    if (oldValue === newValue) return oldCursorPos;
-
-    // Remove commas from both values to get clean comparison
-    const oldClean = oldValue.replace(/,/g, "");
-    const newClean = newValue.replace(/,/g, "");
-
-    // Count commas before cursor position in old value
-    const commasBeforeCursor = (
-      oldValue.substring(0, oldCursorPos).match(/,/g) || []
-    ).length;
-
-    // Find position in clean value (without commas)
-    const cleanCursorPos = oldCursorPos - commasBeforeCursor;
-
-    // Now find the corresponding position in the new formatted value
-    let newCursorPos = 0;
-    let cleanCharCount = 0;
-
-    for (let i = 0; i < newValue.length; i++) {
-      if (newValue[i] === ",") {
-        newCursorPos++;
-        continue;
-      }
-
-      if (cleanCharCount >= cleanCursorPos) {
-        break;
-      }
-
-      newCursorPos++;
-      cleanCharCount++;
-    }
-
-    // Make sure cursor doesn't end up on a comma
-    if (newValue[newCursorPos] === ",") {
-      newCursorPos++;
-    }
-
-    return Math.min(newCursorPos, newValue.length);
-  };
-
-  // Format number with commas while preserving editability
-  const formatWithCommas = (value: string) => {
-    if (!value || value === "") return "";
-
-    // Handle cases where value starts with decimal point
-    if (value === ".") return ".";
-    if (value.startsWith(".")) return "0" + value;
-
-    // Split into integer and decimal parts
-    const parts = value.split(".");
-    const integerPart = parts[0] || "";
-    const decimalPart = parts[1];
-
-    // Don't add commas to empty integer part
-    if (!integerPart) return decimalPart !== undefined ? `.${decimalPart}` : "";
-
-    // Add commas to integer part
-    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-
-    // Combine parts
-    return decimalPart !== undefined
-      ? `${formattedInteger}.${decimalPart}`
-      : formattedInteger;
-  };
-
-  // Get display value with real-time comma formatting
-  const getDisplayValue = (
-    amount: string,
-    currencyCode: string,
-    isFocused: boolean,
-    inputValue: string,
-    isFreeEditing: boolean
-  ) => {
-    // If amount is empty or zero, return empty string to show placeholder
-    if (!amount || amount === "" || amount === "0") {
-      return "";
-    }
-
-    if (isFocused) {
-      if (isFreeEditing && inputValue) {
-        // When in free editing mode, show the raw input value to allow comma deletion
-        return inputValue;
-      } else if (inputValue) {
-        // When focused and we have an inputValue, show it (should be formatted)
-        return inputValue;
-      } else {
-        // Fallback to formatted amount
-        return formatWithCommas(amount);
-      }
-    } else {
-      // When not focused, show formatted amount
-      return formatWithCommas(amount);
     }
   };
 
@@ -430,213 +318,47 @@ export function LimitOrderSheet({
   };
 
   // Handle buy amount change
-  const handleBuyAmountChange = (value: string) => {
-    // Get cursor position before processing
-    const input = buyInputRef.current;
-    const cursorPosition = input?.selectionStart || 0;
-    const oldValue = input?.value || "";
-
-    // Remove commas for processing first
-    let cleanValue = value.replace(/,/g, "");
-
-    // Only allow valid number input (digits and one decimal point)
-    if (cleanValue !== "" && !/^\d*\.?\d*$/.test(cleanValue)) {
-      return; // Invalid input, don't process
-    }
-
-    // Enhanced comma deletion detection
-    const oldCommaCount = (oldValue.match(/,/g) || []).length;
-    const newCommaCount = (value.match(/,/g) || []).length;
-    const oldDigits = oldValue.replace(/[^0-9.]/g, "");
-    const newDigits = value.replace(/[^0-9.]/g, "");
-
-    // Check if user pressed backspace/delete on a comma
-    const isBackspaceOnComma =
-      (lastKeyPressed === "Backspace" || lastKeyPressed === "Delete") &&
-      oldValue.length > 0 &&
-      oldValue === value;
-
-    // Check if commas were deleted while digits remain the same
-    const isCommaDeleted =
-      oldCommaCount > newCommaCount &&
-      oldDigits === newDigits &&
-      oldDigits.length > 0;
-
-    // Check if user manually removed formatting (typed over commas)
-    const shouldEnterFreeEdit = isBackspaceOnComma || isCommaDeleted;
-
-    if (shouldEnterFreeEdit) {
-      setIsBuyFreeEditing(true);
-      setBuyInputValue(value);
-      setBuyAmount(cleanValue);
-      setLastEditedField("buy");
-      // Recalculate sell amount based on limit price
-      if (cleanValue && !isNaN(Number(cleanValue)) && Number(cleanValue) > 0 && Number(limitPrice) > 0) {
-        // If flipped: sellAmount = buyAmount / limitPrice (because limitPrice is inverse)
-        // If not flipped: sellAmount = buyAmount * limitPrice
-        const sellAmountNum = isRateFlipped 
-          ? Number(cleanValue) / Number(limitPrice)
-          : Number(cleanValue) * Number(limitPrice);
-        const sellCurrencyInfo = getCurrencyByCode(sellCurrency);
-        const precision = sellCurrencyInfo?.precision || 2;
-        setSellAmount(sellAmountNum.toFixed(precision));
-      } else {
-        setSellAmount("0");
-      }
-      return;
-    }
-
-    // Update the amount state
-    setBuyAmount(cleanValue);
+  const handleBuyAmountChange = ({ value }: NumberFormatValues, sourceInfo: SourceInfo) => {
+    if (sourceInfo.source !== "event") return;
+    setBuyAmount(value);
     setLastEditedField("buy");
-
-    // Recalculate sell amount based on limit price
-    if (cleanValue && !isNaN(Number(cleanValue)) && Number(cleanValue) > 0 && Number(limitPrice) > 0) {
-      // If flipped: sellAmount = buyAmount / limitPrice (because limitPrice is inverse)
-      // If not flipped: sellAmount = buyAmount * limitPrice
-      const sellAmountNum = isRateFlipped 
-        ? Number(cleanValue) / Number(limitPrice)
-        : Number(cleanValue) * Number(limitPrice);
+    if (value && !isNaN(Number(value)) && Number(value) > 0 && Number(limitPrice) > 0) {
+      const sellAmountNum = isRateFlipped
+        ? Number(value) / Number(limitPrice)
+        : Number(value) * Number(limitPrice);
       const sellCurrencyInfo = getCurrencyByCode(sellCurrency);
       const precision = sellCurrencyInfo?.precision || 2;
       setSellAmount(sellAmountNum.toFixed(precision));
     } else {
       setSellAmount("0");
     }
-
-    if (isBuyFreeEditing) {
-      // In free editing mode, store raw input
-      setBuyInputValue(value);
-    } else {
-      // Normal mode - format with commas and preserve cursor position
-      const formattedValue = formatWithCommas(cleanValue);
-      setBuyInputValue(formattedValue);
-
-      setTimeout(() => {
-        if (input && isBuyFocused) {
-          const newCursorPos = calculateNewCursorPosition(
-            oldValue,
-            formattedValue,
-            cursorPosition
-          );
-          input.setSelectionRange(newCursorPos, newCursorPos);
-        }
-      }, 0);
-    }
   };
 
   // Handle sell amount change
-  const handleSellAmountChange = (value: string) => {
-    // Get cursor position before processing
-    const input = sellInputRef.current;
-    const cursorPosition = input?.selectionStart || 0;
-    const oldValue = input?.value || "";
-
-    // Remove commas for processing first
-    let cleanValue = value.replace(/,/g, "");
-
-    // Only allow valid number input (digits and one decimal point)
-    if (cleanValue !== "" && !/^\d*\.?\d*$/.test(cleanValue)) {
-      return; // Invalid input, don't process
-    }
-
-    // Enhanced comma deletion detection
-    const oldCommaCount = (oldValue.match(/,/g) || []).length;
-    const newCommaCount = (value.match(/,/g) || []).length;
-    const oldDigits = oldValue.replace(/[^0-9.]/g, "");
-    const newDigits = value.replace(/[^0-9.]/g, "");
-
-    // Check if user pressed backspace/delete on a comma
-    const isBackspaceOnComma =
-      (lastKeyPressed === "Backspace" || lastKeyPressed === "Delete") &&
-      oldValue.length > 0 &&
-      oldValue === value;
-
-    // Check if commas were deleted while digits remain the same
-    const isCommaDeleted =
-      oldCommaCount > newCommaCount &&
-      oldDigits === newDigits &&
-      oldDigits.length > 0;
-
-    // Check if user manually removed formatting (typed over commas)
-    const shouldEnterFreeEdit = isBackspaceOnComma || isCommaDeleted;
-
-    if (shouldEnterFreeEdit) {
-      setIsSellFreeEditing(true);
-      setSellInputValue(value);
-      setSellAmount(cleanValue);
-      setLastEditedField("sell");
-      // Recalculate buy amount based on limit price
-      if (cleanValue && !isNaN(Number(cleanValue)) && Number(cleanValue) > 0 && Number(limitPrice) > 0) {
-        // If flipped: buyAmount = sellAmount * limitPrice (because limitPrice is inverse)
-        // If not flipped: buyAmount = sellAmount / limitPrice
-        const buyAmountNum = isRateFlipped 
-          ? Number(cleanValue) * Number(limitPrice)
-          : Number(cleanValue) / Number(limitPrice);
-        const buyCurrencyInfo = getCurrencyByCode(buyCurrency);
-        const precision = buyCurrencyInfo?.precision || 2;
-        setBuyAmount(buyAmountNum.toFixed(precision));
-      } else {
-        setBuyAmount("0");
-      }
-      return;
-    }
-
-    // Update the amount state
-    setSellAmount(cleanValue);
+  const handleSellAmountChange = ({ value }: NumberFormatValues, sourceInfo: SourceInfo) => {
+    if (sourceInfo.source !== "event") return;
+    setSellAmount(value);
     setLastEditedField("sell");
-
-    // Recalculate buy amount based on limit price
-    if (cleanValue && !isNaN(Number(cleanValue)) && Number(cleanValue) > 0 && Number(limitPrice) > 0) {
-      // If flipped: buyAmount = sellAmount * limitPrice (because limitPrice is inverse)
-      // If not flipped: buyAmount = sellAmount / limitPrice
-      const buyAmountNum = isRateFlipped 
-        ? Number(cleanValue) * Number(limitPrice)
-        : Number(cleanValue) / Number(limitPrice);
+    if (value && !isNaN(Number(value)) && Number(value) > 0 && Number(limitPrice) > 0) {
+      const buyAmountNum = isRateFlipped
+        ? Number(value) * Number(limitPrice)
+        : Number(value) / Number(limitPrice);
       const buyCurrencyInfo = getCurrencyByCode(buyCurrency);
       const precision = buyCurrencyInfo?.precision || 2;
       setBuyAmount(buyAmountNum.toFixed(precision));
     } else {
       setBuyAmount("0");
     }
-
-    if (isSellFreeEditing) {
-      // In free editing mode, store raw input
-      setSellInputValue(value);
-    } else {
-      // Normal mode - format with commas and preserve cursor position
-      const formattedValue = formatWithCommas(cleanValue);
-      setSellInputValue(formattedValue);
-
-      setTimeout(() => {
-        if (input && isSellFocused) {
-          const newCursorPos = calculateNewCursorPosition(
-            oldValue,
-            formattedValue,
-            cursorPosition
-          );
-          input.setSelectionRange(newCursorPos, newCursorPos);
-        }
-      }, 0);
-    }
   };
 
   // Handle buy focus
   const handleBuyFocus = () => {
     setIsBuyFocused(true);
-    // Set input value to formatted value with commas when focusing (if not already set)
-    if (!buyInputValue && buyAmount && buyAmount !== "0") {
-      setBuyInputValue(formatWithCommas(buyAmount));
-    }
   };
 
   // Handle buy blur
   const handleBuyBlur = () => {
     setIsBuyFocused(false);
-    // Exit free editing mode and clear input value
-    setIsBuyFreeEditing(false);
-    setBuyInputValue("");
-    // Clean up the value when focus is lost, but only if the numeric value changes
     const num = Number(buyAmount);
     if (!isNaN(num) && num >= 0) {
       const currency = getCurrencyByCode(buyCurrency);
@@ -653,19 +375,11 @@ export function LimitOrderSheet({
   // Handle sell focus
   const handleSellFocus = () => {
     setIsSellFocused(true);
-    // Set input value to formatted value with commas when focusing (if not already set)
-    if (!sellInputValue && sellAmount && sellAmount !== "0") {
-      setSellInputValue(formatWithCommas(sellAmount));
-    }
   };
 
   // Handle sell blur
   const handleSellBlur = () => {
     setIsSellFocused(false);
-    // Exit free editing mode and clear input value
-    setIsSellFreeEditing(false);
-    setSellInputValue("");
-    // Clean up the value when focus is lost, but only if the numeric value changes
     const num = Number(sellAmount);
     if (!isNaN(num) && num >= 0) {
       const currency = getCurrencyByCode(sellCurrency);
@@ -812,11 +526,11 @@ export function LimitOrderSheet({
   const displayedBaseCurrencyInfo = getCurrencyInfo(displayedBaseCurrency);
   const displayedQuoteCurrencyInfo = getCurrencyInfo(displayedQuoteCurrency);
 
-  return (
+  return createPortal(
     <AnimatePresence initial={false} mode="wait">
       {isOpen && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-end justify-center"
+          className="fixed inset-0 z-50 flex items-end justify-center overscroll-none"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -987,22 +701,14 @@ export function LimitOrderSheet({
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <Input
-                    ref={buyInputRef}
-                    value={getDisplayValue(
-                      buyAmount,
-                      buyCurrency,
-                      isBuyFocused,
-                      buyInputValue,
-                      isBuyFreeEditing
-                    )}
-                    onChange={(e) => handleBuyAmountChange(e.target.value)}
-                    onKeyDown={(e) => {
-                      setLastKeyPressed(e.key);
-                      setCursorBeforeKeypress(
-                        e.currentTarget.selectionStart || 0
-                      );
-                    }}
+                  <NumericFormat
+                    getInputRef={buyInputRef}
+                    customInput={Input}
+                    value={buyAmount !== "0" && buyAmount !== "" ? buyAmount : ""}
+                    onValueChange={handleBuyAmountChange}
+                    thousandSeparator=","
+                    decimalSeparator="."
+                    allowNegative={false}
                     onFocus={handleBuyFocus}
                     onBlur={handleBuyBlur}
                     inputMode="decimal"
@@ -1109,22 +815,14 @@ export function LimitOrderSheet({
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <Input
-                    ref={sellInputRef}
-                    value={getDisplayValue(
-                      sellAmount,
-                      sellCurrency,
-                      isSellFocused,
-                      sellInputValue,
-                      isSellFreeEditing
-                    )}
-                    onChange={(e) => handleSellAmountChange(e.target.value)}
-                    onKeyDown={(e) => {
-                      setLastKeyPressed(e.key);
-                      setCursorBeforeKeypress(
-                        e.currentTarget.selectionStart || 0
-                      );
-                    }}
+                  <NumericFormat
+                    getInputRef={sellInputRef}
+                    customInput={Input}
+                    value={sellAmount !== "0" && sellAmount !== "" ? sellAmount : ""}
+                    onValueChange={handleSellAmountChange}
+                    thousandSeparator=","
+                    decimalSeparator="."
+                    allowNegative={false}
                     onFocus={handleSellFocus}
                     onBlur={handleSellBlur}
                     inputMode="decimal"
@@ -1268,7 +966,8 @@ export function LimitOrderSheet({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
 

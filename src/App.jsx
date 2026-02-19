@@ -93,6 +93,25 @@ export default function App() {
   const ratesRef = useRef(rates);
   ratesRef.current = rates;
   const logIdRef = useRef(1);
+  const tradingWidgetRef = useRef(null);
+
+  // Cmd+Arrow key navigation between tabs
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!e.metaKey) return;
+
+      if (e.key === 'ArrowRight' && activeTab !== 'balances') {
+        e.preventDefault();
+        setActiveTab('balances');
+      } else if (e.key === 'ArrowLeft' && activeTab !== 'trade') {
+        e.preventDefault();
+        setActiveTab('trade');
+        setTimeout(() => tradingWidgetRef.current?.focusBuy(), 100);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab]);
 
   const totals = useMemo(
     () => calculateTotals(balances, rates, creditLimit),
@@ -245,18 +264,19 @@ export default function App() {
             </div>
             <div>
               <motion.div
-                className="flex w-[200%]"
-                animate={{ transform: activeTab === 'trade' ? 'translateX(0%)' : 'translateX(-50%)' }}
-                transition={{ duration: 0.3, ease: [0.645, 0.045, 0.355, 1] }}
+                className="flex"
+                animate={{ transform: activeTab === 'trade' ? 'translateX(0%)' : 'translateX(-80%)' }}
+                transition={{ duration: 0.5, ease: [0.645, 0.045, 0.355, 1] }}
                 style={{ willChange: 'transform' }}
               >
                 <motion.div
-                  className="w-1/2 min-w-0"
+                  className="min-w-0 shrink-0"
+                  style={{ width: '80%' }}
                   animate={{ opacity: activeTab === 'trade' ? 1 : 0.15 }}
                   transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-                  style={{ willChange: 'opacity' }}
                 >
                   <TradingWidget
+                    ref={tradingWidgetRef}
                     onTradeExecuted={handleTradeFromWidget}
                     balances={balances}
                     rates={rates}
@@ -267,10 +287,10 @@ export default function App() {
                   />
                 </motion.div>
                 <motion.div
-                  className="w-1/2 min-w-0"
+                  className="min-w-0 shrink-0"
+                  style={{ width: '100%' }}
                   animate={{ opacity: activeTab === 'balances' ? 1 : 0.15 }}
                   transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-                  style={{ willChange: 'opacity' }}
                 >
                   <MetricsSection totals={totals} model={model} ratesLoading={ratesLoading} />
                   <ButtonGroup
