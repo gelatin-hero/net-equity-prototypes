@@ -1,7 +1,9 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { flushSync } from 'react-dom';
 import { Agentation } from 'agentation';
 import { BASE_RATES, CURRENCY_CODES, getDefaultRateRangeBips } from './constants/currencies';
+import { fetchRatesFromAPI, invalidateRatesCache } from './network/ratesFetcher';
 import { calculateTotals } from './utils/calculations';
 import { ModelTabs } from './components/ModelTabs';
 import { MetricsSection } from './components/MetricsSection';
@@ -11,9 +13,9 @@ import { FabGroup } from './components/FabGroup';
 import { RateBar } from './components/RateBar';
 import { DepositModal } from './components/DepositModal';
 import { WithdrawModal } from './components/WithdrawModal';
-import { TradeModal } from './components/TradeModal';
 import { EditModal } from './components/EditModal';
 import { LogsDrawer } from './components/LogsDrawer';
+import { TradingWidget } from './components/trade/CurrencyConverter';
 import { MATRIX_LOADER_ONE_CYCLE_MS } from './components/MatrixLoader';
 
 const REFRESH_DELAY_MS = MATRIX_LOADER_ONE_CYCLE_MS;
@@ -67,7 +69,7 @@ export default function App() {
 
   const [modalDeposit, setModalDeposit] = useState(false);
   const [modalWithdraw, setModalWithdraw] = useState(false);
-  const [modalTrade, setModalTrade] = useState(false);
+  const [activeTab, setActiveTab] = useState('trade');
   const [modalEdit, setModalEdit] = useState(false);
   const [disabledCurrencies, setDisabledCurrencies] = useState({
     AED: true,
@@ -91,6 +93,25 @@ export default function App() {
   const ratesRef = useRef(rates);
   ratesRef.current = rates;
   const logIdRef = useRef(1);
+  const tradingWidgetRef = useRef(null);
+
+  // Cmd+Arrow key navigation between tabs
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!e.metaKey) return;
+
+      if (e.key === 'ArrowRight' && activeTab !== 'balances') {
+        e.preventDefault();
+        setActiveTab('balances');
+      } else if (e.key === 'ArrowLeft' && activeTab !== 'trade') {
+        e.preventDefault();
+        setActiveTab('trade');
+        setTimeout(() => tradingWidgetRef.current?.focusBuy(), 100);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab]);
 
   const totals = useMemo(
     () => calculateTotals(balances, rates, creditLimit),
@@ -104,23 +125,31 @@ export default function App() {
       refreshTimeoutRef.current = null;
     }
 
-    // Compute new rates and store them (don't apply yet)
-    const nextRates = refreshRatesFromBase(baseRates, rateRangeBips);
-    pendingRatesRef.current = nextRates;
-
     // Set loading state synchronously so loaders start animating immediately
     flushSync(() => setRatesLoading(true));
 
-    // After 2 seconds, apply the new rates and stop loading
-    refreshTimeoutRef.current = setTimeout(() => {
-      if (pendingRatesRef.current != null) {
-        setRates(pendingRatesRef.current);
-        setLastRefresh(new Date().toLocaleTimeString());
-        pendingRatesRef.current = null;
-      }
-      setRatesLoading(false);
-      refreshTimeoutRef.current = null;
-    }, REFRESH_DELAY_MS);
+    // Try API first, fall back to local simulation
+    invalidateRatesCache();
+    fetchRatesFromAPI()
+      .then((apiRates) => {
+        pendingRatesRef.current = apiRates;
+      })
+      .catch(() => {
+        // Fallback to local simulation
+        pendingRatesRef.current = refreshRatesFromBase(baseRates, rateRangeBips);
+      })
+      .finally(() => {
+        // Apply rates after the loader animation completes
+        refreshTimeoutRef.current = setTimeout(() => {
+          if (pendingRatesRef.current != null) {
+            setRates(pendingRatesRef.current);
+            setLastRefresh(new Date().toLocaleTimeString());
+            pendingRatesRef.current = null;
+          }
+          setRatesLoading(false);
+          refreshTimeoutRef.current = null;
+        }, REFRESH_DELAY_MS);
+      });
   }, [baseRates, rateRangeBips]);
 
   const handleSimulateFx = useCallback(() => {
@@ -198,6 +227,11 @@ export default function App() {
     ]);
   }, []);
 
+  // Bridge: Trade Widget provides { soldCurrency, soldAmount, purchasedCurrency, purchasedAmount }
+  const handleTradeFromWidget = useCallback((trade) => {
+    handleTrade(trade.soldCurrency, trade.purchasedCurrency, trade.soldAmount);
+  }, [handleTrade]);
+
   const handleSaveEdit = useCallback((newBalances, newCreditLimit, newRateRangeBips, newDisabledCurrencies, newBaseRates) => {
     setBalances(newBalances);
     setCreditLimit(newCreditLimit);
@@ -211,23 +245,68 @@ export default function App() {
       <ModelTabs model={model} onModelChange={setModel} />
       <div className={`app-layout${logsOpen ? ' app-layout--drawer-open' : ''}`}>
         <div className="app-main">
-          <div className="container">
-            <h1 className="title">
-              Overview
-            </h1>
-            <MetricsSection totals={totals} model={model} ratesLoading={ratesLoading} />
-            <ButtonGroup
-              onDeposit={() => setModalDeposit(true)}
-              onWithdraw={() => setModalWithdraw(true)}
-              onTrade={() => setModalTrade(true)}
-            />
-            <CurrencyTable
-              balances={balances}
-              rates={rates}
-              ratesLoading={ratesLoading}
-              disabledCurrencies={disabledCurrencies}
-            />
-            <RateBar lastRefresh={lastRefresh} />
+          <div className="app-container">
+            <div className="tab-nav">
+              <button
+                type="button"
+                className={`tab-btn ${activeTab === 'trade' ? 'tab-btn--active' : 'tab-btn--inactive'}`}
+                onClick={() => setActiveTab('trade')}
+              >
+                Trade
+              </button>
+              <button
+                type="button"
+                className={`tab-btn ${activeTab === 'balances' ? 'tab-btn--active' : 'tab-btn--inactive'}`}
+                onClick={() => setActiveTab('balances')}
+              >
+                Balances
+              </button>
+            </div>
+            <div>
+              <motion.div
+                className="flex"
+                animate={{ transform: activeTab === 'trade' ? 'translateX(0%)' : 'translateX(-80%)' }}
+                transition={{ duration: 0.5, ease: [0.645, 0.045, 0.355, 1] }}
+                style={{ willChange: 'transform' }}
+              >
+                <motion.div
+                  className="min-w-0 shrink-0"
+                  style={{ width: '80%' }}
+                  animate={{ opacity: activeTab === 'trade' ? 1 : 0.15 }}
+                  transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                >
+                  <TradingWidget
+                    ref={tradingWidgetRef}
+                    onTradeExecuted={handleTradeFromWidget}
+                    balances={balances}
+                    rates={rates}
+                    creditLimit={creditLimit}
+                    totals={totals}
+                    disabledCurrencies={disabledCurrencies}
+                    model={model}
+                  />
+                </motion.div>
+                <motion.div
+                  className="min-w-0 shrink-0"
+                  style={{ width: '100%' }}
+                  animate={{ opacity: activeTab === 'balances' ? 1 : 0.15 }}
+                  transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                >
+                  <MetricsSection totals={totals} model={model} ratesLoading={ratesLoading} />
+                  <ButtonGroup
+                    onDeposit={() => setModalDeposit(true)}
+                    onWithdraw={() => setModalWithdraw(true)}
+                  />
+                  <CurrencyTable
+                    balances={balances}
+                    rates={rates}
+                    ratesLoading={ratesLoading}
+                    disabledCurrencies={disabledCurrencies}
+                  />
+                  <RateBar lastRefresh={lastRefresh} />
+                </motion.div>
+              </motion.div>
+            </div>
           </div>
         </div>
 
@@ -264,16 +343,6 @@ export default function App() {
         rates={rates}
         totals={totals}
         onWithdraw={handleWithdraw}
-        disabledCurrencies={disabledCurrencies}
-        model={model}
-      />
-      <TradeModal
-        open={modalTrade}
-        onClose={() => setModalTrade(false)}
-        balances={balances}
-        rates={rates}
-        totals={totals}
-        onTrade={handleTrade}
         disabledCurrencies={disabledCurrencies}
         model={model}
       />

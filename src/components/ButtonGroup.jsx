@@ -18,7 +18,7 @@ function ButtonIcon({ src, fallback }) {
   );
 }
 
-export function ButtonGroup({ onDeposit, onWithdraw, onTrade }) {
+export function ButtonGroup({ onDeposit, onWithdraw }) {
   return (
     <div className="btn-group">
       <button type="button" className="btn btn-primary" onClick={onDeposit}>
@@ -28,10 +28,6 @@ export function ButtonGroup({ onDeposit, onWithdraw, onTrade }) {
       <button type="button" className="btn btn-secondary" onClick={onWithdraw}>
         <ButtonIcon src={`${ICONS_BASE}/withdraw.svg`} fallback="⊙" />
         Withdraw funds
-      </button>
-      <button type="button" className="btn btn-outline" onClick={onTrade}>
-        <ButtonIcon src={`${ICONS_BASE}/trade.svg`} fallback="⇄" />
-        Execute trade
       </button>
     </div>
   );
