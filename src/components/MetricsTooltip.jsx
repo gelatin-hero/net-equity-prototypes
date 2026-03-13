@@ -42,7 +42,7 @@ function CurrencyRow({ item, variant }) {
  * - description: descriptive text below the value
  * - footer: text at the bottom
  * - items: array of { currency, balance, usd }
- * - creditLimit: (credit type only) the credit limit number
+ * - creditLimit: (credit type only) the credit line number
  * - creditShorthand: (credit type only) e.g. "10M"
  */
 export function MetricsTooltip({ type, totalUsd, description, footer, items, creditLimit, creditShorthand, children }) {

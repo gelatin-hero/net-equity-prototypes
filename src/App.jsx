@@ -12,7 +12,7 @@ import { CurrencyTable } from './components/CurrencyTable';
 import { FabGroup } from './components/FabGroup';
 import { RateBar } from './components/RateBar';
 import { DepositModal } from './components/DepositModal';
-import { WithdrawModal } from './components/WithdrawModal';
+import { WithdrawalModal } from './components/trade/WithdrawalModal';
 import { EditModal } from './components/EditModal';
 import { LogsDrawer } from './components/LogsDrawer';
 import { TradingWidget } from './components/trade/CurrencyConverter';
@@ -240,6 +240,12 @@ export default function App() {
     if (newBaseRates != null) setBaseRates(newBaseRates);
   }, []);
 
+  const handleRequestPayment = useCallback(() => {
+    if (typeof window !== 'undefined' && window.alert) {
+      window.alert('Request payment flow coming soon.');
+    }
+  }, []);
+
   return (
     <>
       <ModelTabs model={model} onModelChange={setModel} />
@@ -271,31 +277,41 @@ export default function App() {
               >
                 <motion.div
                   className="min-w-0 shrink-0"
-                  style={{ width: '80%' }}
+                  style={{ width: '80%', cursor: activeTab !== 'trade' ? 'pointer' : 'auto' }}
                   animate={{ opacity: activeTab === 'trade' ? 1 : 0.15 }}
                   transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                  onClick={activeTab !== 'trade' ? () => {
+                    setActiveTab('trade');
+                    setTimeout(() => tradingWidgetRef.current?.focusBuy(), 100);
+                  } : undefined}
                 >
-                  <TradingWidget
-                    ref={tradingWidgetRef}
-                    onTradeExecuted={handleTradeFromWidget}
-                    balances={balances}
-                    rates={rates}
-                    creditLimit={creditLimit}
-                    totals={totals}
-                    disabledCurrencies={disabledCurrencies}
-                    model={model}
-                  />
+                  <div style={{ pointerEvents: activeTab !== 'trade' ? 'none' : 'auto' }}>
+                    <TradingWidget
+                      ref={tradingWidgetRef}
+                      onTradeExecuted={handleTradeFromWidget}
+                      balances={balances}
+                      rates={rates}
+                      creditLimit={creditLimit}
+                      totals={totals}
+                      disabledCurrencies={disabledCurrencies}
+                      model={model}
+                    />
+                  </div>
                 </motion.div>
                 <motion.div
                   className="min-w-0 shrink-0"
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', cursor: activeTab !== 'balances' ? 'pointer' : 'auto' }}
                   animate={{ opacity: activeTab === 'balances' ? 1 : 0.15 }}
                   transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                  onClick={activeTab !== 'balances' ? () => setActiveTab('balances') : undefined}
                 >
+                  <div style={{ pointerEvents: activeTab !== 'balances' ? 'none' : 'auto' }}>
+
                   <MetricsSection totals={totals} model={model} ratesLoading={ratesLoading} />
                   <ButtonGroup
                     onDeposit={() => setModalDeposit(true)}
                     onWithdraw={() => setModalWithdraw(true)}
+                    onRequestPayment={handleRequestPayment}
                   />
                   <CurrencyTable
                     balances={balances}
@@ -304,6 +320,7 @@ export default function App() {
                     disabledCurrencies={disabledCurrencies}
                   />
                   <RateBar lastRefresh={lastRefresh} />
+                  </div>
                 </motion.div>
               </motion.div>
             </div>
@@ -336,15 +353,15 @@ export default function App() {
         onDeposit={handleDeposit}
         disabledCurrencies={disabledCurrencies}
       />
-      <WithdrawModal
-        open={modalWithdraw}
+      <WithdrawalModal
+        isOpen={modalWithdraw}
         onClose={() => setModalWithdraw(false)}
         balances={balances}
         rates={rates}
         totals={totals}
         onWithdraw={handleWithdraw}
-        disabledCurrencies={disabledCurrencies}
         model={model}
+        disabledCurrencies={disabledCurrencies}
       />
       <EditModal
         open={modalEdit}
