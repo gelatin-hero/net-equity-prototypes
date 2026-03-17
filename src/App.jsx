@@ -12,7 +12,7 @@ import { CurrencyTable } from './components/CurrencyTable';
 import { FabGroup } from './components/FabGroup';
 import { RateBar } from './components/RateBar';
 import { DepositModal } from './components/DepositModal';
-import { WithdrawModal } from './components/WithdrawModal';
+import { WithdrawalModal } from './components/trade/WithdrawalModal';
 import { EditModal } from './components/EditModal';
 import { LogsDrawer } from './components/LogsDrawer';
 import { TradingWidget } from './components/trade/CurrencyConverter';
@@ -42,12 +42,35 @@ function simulateRatesFromCurrent(currentRates, baseRates, rateRangeBips) {
     if (c === 'USD' || c === 'USDC' || c === 'USDT') return;
     const { minBips, maxBips } = rateRangeBips[c] ?? { minBips: -5000, maxBips: 5000 };
     if (minBips === 0 && maxBips === 0) return;
-    const pct = 0.0025 + Math.random() * 0.0125;
-    const sign = Math.random() < 0.5 ? -1 : 1;
-    next[c] = next[c] * (1 + sign * pct);
     const minRate = baseRates[c] * (1 + minBips / 10000);
     const maxRate = baseRates[c] * (1 + maxBips / 10000);
-    next[c] = Math.max(minRate, Math.min(maxRate, next[c]));
+    const range = maxRate - minRate;
+    if (range <= 0) return;
+
+    // Minimum step: at least 5% of the range so the change is always visible
+    const minStep = range * 0.05;
+    const pct = 0.0025 + Math.random() * 0.0125;
+    const sign = Math.random() < 0.5 ? -1 : 1;
+    let candidate = next[c] * (1 + sign * pct);
+    candidate = Math.max(minRate, Math.min(maxRate, candidate));
+
+    // If clamping or rounding killed the change, force a move
+    if (candidate === next[c]) {
+      candidate = next[c] === maxRate
+        ? next[c] - minStep
+        : next[c] + minStep;
+      candidate = Math.max(minRate, Math.min(maxRate, candidate));
+    }
+
+    // Final guard: if still no change (e.g. at midpoint of tiny range), pick a random spot that differs
+    if (candidate === next[c]) {
+      candidate = minRate + Math.random() * range;
+      if (candidate === next[c]) {
+        candidate = next[c] === minRate ? maxRate : minRate;
+      }
+    }
+
+    next[c] = candidate;
   });
   return next;
 }
@@ -164,18 +187,25 @@ export default function App() {
   useEffect(() => {
     if (!autoRefreshOn) return undefined;
 
-    // Kick off an immediate refresh, then continue refreshing after each hold period.
-    handleRefreshRates();
+    let loaderTimeout = null;
 
-    const intervalMs = REFRESH_DELAY_MS + AUTO_REFRESH_HOLD_MS;
-    const id = setInterval(() => {
-      handleRefreshRates();
-    }, intervalMs);
+    const tick = () => {
+      flushSync(() => setRatesLoading(true));
+      handleSimulateFx();
+      loaderTimeout = setTimeout(() => setRatesLoading(false), REFRESH_DELAY_MS);
+    };
+
+    // Kick off an immediate simulation, then continue on each tick.
+    tick();
+
+    const id = setInterval(tick, REFRESH_DELAY_MS + AUTO_REFRESH_HOLD_MS);
 
     return () => {
       clearInterval(id);
+      if (loaderTimeout != null) clearTimeout(loaderTimeout);
+      setRatesLoading(false);
     };
-  }, [autoRefreshOn, handleRefreshRates]);
+  }, [autoRefreshOn, handleSimulateFx]);
 
   const handleDeposit = useCallback((currency, amount) => {
     const closingBalance = (balancesRef.current[currency] ?? 0) + amount;
@@ -240,6 +270,12 @@ export default function App() {
     if (newBaseRates != null) setBaseRates(newBaseRates);
   }, []);
 
+  const handleRequestPayment = useCallback(() => {
+    if (typeof window !== 'undefined' && window.alert) {
+      window.alert('Request payment flow coming soon.');
+    }
+  }, []);
+
   return (
     <>
       <ModelTabs model={model} onModelChange={setModel} />
@@ -271,31 +307,41 @@ export default function App() {
               >
                 <motion.div
                   className="min-w-0 shrink-0"
-                  style={{ width: '80%' }}
+                  style={{ width: '80%', cursor: activeTab !== 'trade' ? 'pointer' : 'auto' }}
                   animate={{ opacity: activeTab === 'trade' ? 1 : 0.15 }}
                   transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                  onClick={activeTab !== 'trade' ? () => {
+                    setActiveTab('trade');
+                    setTimeout(() => tradingWidgetRef.current?.focusBuy(), 100);
+                  } : undefined}
                 >
-                  <TradingWidget
-                    ref={tradingWidgetRef}
-                    onTradeExecuted={handleTradeFromWidget}
-                    balances={balances}
-                    rates={rates}
-                    creditLimit={creditLimit}
-                    totals={totals}
-                    disabledCurrencies={disabledCurrencies}
-                    model={model}
-                  />
+                  <div style={{ pointerEvents: activeTab !== 'trade' ? 'none' : 'auto' }}>
+                    <TradingWidget
+                      ref={tradingWidgetRef}
+                      onTradeExecuted={handleTradeFromWidget}
+                      balances={balances}
+                      rates={rates}
+                      creditLimit={creditLimit}
+                      totals={totals}
+                      disabledCurrencies={disabledCurrencies}
+                      model={model}
+                    />
+                  </div>
                 </motion.div>
                 <motion.div
                   className="min-w-0 shrink-0"
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', cursor: activeTab !== 'balances' ? 'pointer' : 'auto' }}
                   animate={{ opacity: activeTab === 'balances' ? 1 : 0.15 }}
                   transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                  onClick={activeTab !== 'balances' ? () => setActiveTab('balances') : undefined}
                 >
+                  <div style={{ pointerEvents: activeTab !== 'balances' ? 'none' : 'auto' }}>
+
                   <MetricsSection totals={totals} model={model} ratesLoading={ratesLoading} />
                   <ButtonGroup
                     onDeposit={() => setModalDeposit(true)}
                     onWithdraw={() => setModalWithdraw(true)}
+                    onRequestPayment={handleRequestPayment}
                   />
                   <CurrencyTable
                     balances={balances}
@@ -304,6 +350,7 @@ export default function App() {
                     disabledCurrencies={disabledCurrencies}
                   />
                   <RateBar lastRefresh={lastRefresh} />
+                  </div>
                 </motion.div>
               </motion.div>
             </div>
@@ -336,15 +383,15 @@ export default function App() {
         onDeposit={handleDeposit}
         disabledCurrencies={disabledCurrencies}
       />
-      <WithdrawModal
-        open={modalWithdraw}
+      <WithdrawalModal
+        isOpen={modalWithdraw}
         onClose={() => setModalWithdraw(false)}
         balances={balances}
         rates={rates}
         totals={totals}
         onWithdraw={handleWithdraw}
-        disabledCurrencies={disabledCurrencies}
         model={model}
+        disabledCurrencies={disabledCurrencies}
       />
       <EditModal
         open={modalEdit}

@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { getCurrencyFlag } from "./CurrencyFlags";
 import { motion, AnimatePresence } from "motion/react";
 import { useEffect, useState } from "react";
-import { useCurrenciesStore } from "../../stores/useCurrenciesStore";
 
 interface CurrencyModalProps {
   isOpen: boolean;
@@ -201,22 +200,37 @@ export function CurrencyModal({
   convertCurrency,
   disabledCurrencies,
 }: CurrencyModalProps) {
-  const allCurrencies = useCurrenciesStore((s) => s.currencies);
-  const currencies = disabledCurrencies
-    ? allCurrencies.filter((c) => !disabledCurrencies[c.code])
-    : allCurrencies;
-  const loading = useCurrenciesStore((s) => s.loading);
-  const fetchIfNeeded = useCurrenciesStore((s) => s.fetchIfNeeded);
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetchIfNeeded({
-      balances,
-      formatBalance,
-      convertCurrency,
-      getCurrencyDisplayData,
-      ttlMs: 5 * 60_000, // 5 min cache; tweak or remove
-    });
-  }, [balances, formatBalance, convertCurrency, fetchIfNeeded]);
+    if (!isOpen) return;
+
+    let cancelled = false;
+    setLoading(true);
+
+    getCurrencyDisplayData(balances, formatBalance, convertCurrency)
+      .then((data) => {
+        if (cancelled) return;
+        const filtered = disabledCurrencies
+          ? data.filter((c) => !disabledCurrencies[c.code])
+          : data;
+        setCurrencies(filtered);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error("Error loading currencies for modal:", error);
+        setCurrencies([]);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, balances, formatBalance, convertCurrency, disabledCurrencies]);
 
   const recentCurrencies = currencies.slice(0, 3);
   const allOtherCurrencies = currencies.slice(3);

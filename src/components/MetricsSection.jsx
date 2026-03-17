@@ -104,7 +104,7 @@ export function MetricsSection({ totals, model = 'A', ratesLoading = false }) {
               style={{ color: netBalanceValue >= 0 ? '#1c1c1c' : '#ef4444' }}
             >
               <span>{netBalanceParts.integer}</span>
-              <span className="metrics-value-decimal">{netBalanceParts.decimal}</span>
+              <span className="metrics-value-decimal" style={netBalanceValue < 0 ? { color: 'rgba(239, 68, 68, 0.35)' } : undefined}>{netBalanceParts.decimal}</span>
               {' '}
               <MatrixLoader
                 size={14}
@@ -118,10 +118,9 @@ export function MetricsSection({ totals, model = 'A', ratesLoading = false }) {
                 <>
                   <MetricsTooltip
                     type="positive"
-                    totalUsd={holdings}
-                    description="Sum of your positive balances across cash and digital assets."
-                    items={holdingsBreakdown}
-                    footer="Positive balances can be used to make more trades or settle negative balances"
+                    totalUsd={equity}
+                    description="Your net positive balances minus your net negative balances in USD."
+                    footer="Account equity = Net positive balance - Net negative balance"
                   >
                     <span className="metrics-subtitle-item">Account equity</span>
                   </MetricsTooltip>
@@ -135,7 +134,7 @@ export function MetricsSection({ totals, model = 'A', ratesLoading = false }) {
                         items={obligationsBreakdown}
                         footer="Settle by depositing in these respective currencies or converting from another balance. Settling unlocks more for withdrawal."
                       >
-                        <span className="metrics-subtitle-item">Owed above credit limit</span>
+                        <span className="metrics-subtitle-item">Owed above credit line</span>
                       </MetricsTooltip>
                     </>
                   )}
@@ -159,54 +158,67 @@ export function MetricsSection({ totals, model = 'A', ratesLoading = false }) {
                     items={obligationsBreakdown}
                     footer="Settle by depositing in these respective currencies or converting from another balance. Settling unlocks more for withdrawal."
                   >
-                    <span className="metrics-subtitle-item">Net negative balance</span>
+                    <span className="metrics-subtitle-item">{isModelC ? 'Unsettled balance' : 'Net negative balance'}</span>
                   </MetricsTooltip>
                 </>
               )}
             </div>
           </div>
 
-          {/* Right: Available credit */}
+          {/* Right: Unsettled balance (Model C) / Available credit (others) */}
           <div className="metrics-col">
-            <MetricsInfoTooltip label="Available credit">
-              <span className="metrics-info-body">
-                Your credit limit minus your negative balances in USD. This is how much you can trade using credit.
-              </span>
-              <span className="metrics-info-divider" />
-              <span className="metrics-info-body">
-                New trades that utilize credit reduce it, settling negative balances restores it
-              </span>
-              <span className="metrics-info-divider" />
-              <span className="metrics-info-formula">
-                Available credit = (Credit limit - Net Negative balance)
-              </span>
-            </MetricsInfoTooltip>
-            <div className="metrics-value">
-              <span>{creditParts.integer}</span>
-              <span className="metrics-value-decimal">{creditParts.decimal}</span>
-            </div>
+            {isModelC ? (
+              <MetricsInfoTooltip label="Unsettled balance">
+                <span className="metrics-info-body">
+                  The total of your negative balances across all positions, shown against your credit line ceiling.
+                </span>
+                <span className="metrics-info-divider" />
+                <span className="metrics-info-body">
+                  New trades that utilize credit increase it, settling negative balances reduces it
+                </span>
+                <span className="metrics-info-formula">
+                  Unsettled balance = Net negative balance (capped at Credit line)
+                </span>
+              </MetricsInfoTooltip>
+            ) : (
+              <MetricsInfoTooltip label="Available credit">
+                <span className="metrics-info-body">
+                  Your credit line minus your negative balances in USD. This is how much you can trade using credit.
+                </span>
+                <span className="metrics-info-divider" />
+                <span className="metrics-info-body">
+                  New trades that utilize credit reduce it, settling negative balances restores it
+                </span>
+                <span className="metrics-info-divider" />
+                <span className="metrics-info-formula">
+                  Available credit = (Credit line - Net Negative balance)
+                </span>
+              </MetricsInfoTooltip>
+            )}
+            {isModelC ? (
+              <div className="metrics-value">
+                <span>{formatValueParts(obligations).integer}</span>
+                {obligations % 1 !== 0 && (
+                  <span className="metrics-value-decimal">{formatValueParts(obligations).decimal}</span>
+                )}
+                <span style={{ color: 'rgba(28,28,28,0.35)' }}> / {creditShorthand}</span>
+              </div>
+            ) : (
+              <div className="metrics-value">
+                <span>{creditParts.integer}</span>
+                <span className="metrics-value-decimal">{creditParts.decimal}</span>
+              </div>
+            )}
             <div className="metrics-subtitle">
               {isModelC ? (
-                <>
-                  <MetricsTooltip
-                    type="credit"
-                    creditLimit={creditLimit}
-                    creditShorthand={creditShorthand}
-                    description="Additional trading capacity beyond your deposits, denominated in USD. Can be used to trade in any supported currency"
-                  >
-                    <span className="metrics-subtitle-item">Credit limit</span>
-                  </MetricsTooltip>
-                  <span className="metrics-subtitle-sep">-</span>
-                  <MetricsTooltip
-                    type="negative"
-                    totalUsd={obligations}
-                    description="Sum of your negative balances across cash and digital assets."
-                    items={obligationsBreakdown}
-                    footer="Settle by depositing in these respective currencies or converting from another balance. Settling unlocks more for withdrawal."
-                  >
-                    <span className="metrics-subtitle-item">Net negative balance</span>
-                  </MetricsTooltip>
-                </>
+                <MetricsTooltip
+                  type="credit"
+                  creditLimit={creditLimit}
+                  creditShorthand={creditShorthand}
+                  description="Additional trading capacity beyond your deposits, denominated in USD. Can be used to trade in any supported currency"
+                >
+                  <span className="metrics-subtitle-item">Capped by your credit line</span>
+                </MetricsTooltip>
               ) : (
                 <>
                   <MetricsTooltip
@@ -239,7 +251,9 @@ export function MetricsSection({ totals, model = 'A', ratesLoading = false }) {
         <span className="metrics-headsup-tag">HEADSUP</span>
         <span className="metrics-headsup-dot" aria-hidden="true">&bull;</span>
         <span className="metrics-headsup-text">
-          Your traded amounts are always locked. Settle your negative balances to withdraw your entire traded balance
+          {isModelC
+            ? 'Your traded amounts are always locked. Clear your unsettled balances to withdraw your entire traded balance'
+            : 'Your traded amounts are always locked. Settle your negative balances to withdraw your entire traded balance'}
         </span>
       </div>
     </div>

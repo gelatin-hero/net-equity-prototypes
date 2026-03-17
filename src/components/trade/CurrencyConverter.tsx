@@ -217,6 +217,33 @@ export const TradingWidget = forwardRef<TradingWidgetHandle, TradingWidgetProps>
   const debouncedBuyAmount = useDebounce(buyAmount, 800);
   const debouncedSellAmount = useDebounce(sellAmount, 800);
 
+  // Balances from parent (net-equity calculator) or fallback to empty
+  const balances = externalBalances ?? {};
+
+  // Available credit (in USD) used for trading and sell validations.
+  // We deliberately use the same source here as the "Available to sell" computation
+  // to avoid discrepancies between the displayed limit and validation logic.
+  const creditAvailableUSD =
+    model === "C"
+      ? totals?.availableCredit ?? creditLimit
+      : totals?.creditRemaining ?? creditLimit;
+
+  // This value is used in checkSellAmountValidity and trading-limit checks.
+  const availableCredit = creditAvailableUSD;
+
+  // Trading limit — use credit line as the ceiling
+  const tradingLimitUSD = creditLimit;
+
+  // Available to sell in the selected sell currency.
+  // `externalRates` are quoted as USD per 1 unit of currency (see CurrencyTable "Rate (to USD)"),
+  // so to convert USD credit into the sell currency we DIVIDE by the rate.
+  const sellRate = externalRates?.[sellCurrency] ?? 1;
+  const sellBalance = balances[sellCurrency] ?? 0;
+  const creditInSellCurrency = sellRate > 0 ? creditAvailableUSD / sellRate : 0;
+  const availableToSell = sellBalance >= 0
+    ? sellBalance + creditInSellCurrency
+    : creditInSellCurrency;
+
   // Check trading limits whenever amounts or currencies change
   useEffect(() => {
     const checkCurrentLimits = () => {
@@ -266,27 +293,7 @@ export const TradingWidget = forwardRef<TradingWidgetHandle, TradingWidgetProps>
     };
 
     checkCurrentLimits();
-  }, [buyAmount, sellAmount, buyCurrency, sellCurrency]);
-
-  // Balances from parent (net-equity calculator) or fallback to empty
-  const balances = externalBalances ?? {};
-
-  // Available credit from parent totals or fallback
-  const availableCredit = totals?.availableCredit ?? Math.max(0, creditLimit);
-
-  // Trading limit — use credit limit as the ceiling
-  const tradingLimitUSD = creditLimit;
-
-  // Available to sell in the selected sell currency
-  const sellRate = externalRates?.[sellCurrency] ?? 1;
-  const sellBalance = balances[sellCurrency] ?? 0;
-  const creditAvailableUSD = model === 'C'
-    ? (totals?.availableCredit ?? creditLimit)
-    : (totals?.creditRemaining ?? creditLimit);
-  const creditInSellCurrency = sellRate > 0 ? creditAvailableUSD / sellRate : 0;
-  const availableToSell = sellBalance >= 0
-    ? sellBalance + creditInSellCurrency
-    : creditInSellCurrency;
+  }, [buyAmount, sellAmount, buyCurrency, sellCurrency, availableToSell]);
 
   const getCurrencyInfo = (code: string): { flag: React.ReactElement | null; name: string } => {
     // Handle empty currency code - return null flag and "Select asset" text
@@ -411,7 +418,7 @@ export const TradingWidget = forwardRef<TradingWidgetHandle, TradingWidgetProps>
       sellAmountNum,
       currency,
       "USD",
-      "buy"
+      "sell"
     );
 
     // Get current balance in USD
@@ -419,7 +426,7 @@ export const TradingWidget = forwardRef<TradingWidgetHandle, TradingWidgetProps>
       balances[currency] || 0,
       currency,
       "USD",
-      "buy"
+      "sell"
     );
 
     // Total available = balance + credit
@@ -793,22 +800,25 @@ export const TradingWidget = forwardRef<TradingWidgetHandle, TradingWidgetProps>
     }
   };
 
-  const handleSellAmountChange = ({ value }: NumberFormatValues, sourceInfo: SourceInfo) => {
+  const handleSellAmountChange = async (
+    { value }: NumberFormatValues,
+    sourceInfo: SourceInfo
+  ) => {
     if (sourceInfo.source !== "event") return;
     pauseTimer();
     setSellAmount(value);
     setLastEditedField("sell");
     if (value && !isNaN(Number(value)) && Number(value) > 0) {
-      if (!checkSellAmountValidity(value, sellCurrency)) {
-        setSellAmountError(true);
-      } else {
-        setSellAmountError(false);
-      }
-      if (!checkTradingLimit(value, sellCurrency, buyAmount, buyCurrency)) {
-        setTradingLimitError(true);
-      } else {
-        setTradingLimitError(false);
-      }
+      const isSellValid = await checkSellAmountValidity(value, sellCurrency);
+      setSellAmountError(!isSellValid);
+
+      const isWithinLimit = await checkTradingLimit(
+        value,
+        sellCurrency,
+        buyAmount,
+        buyCurrency
+      );
+      setTradingLimitError(!isWithinLimit);
     } else {
       setSellAmountError(false);
       setTradingLimitError(false);
@@ -1053,12 +1063,16 @@ export const TradingWidget = forwardRef<TradingWidgetHandle, TradingWidgetProps>
     };
   }, []); // Empty dependency array since we don't need to re-add the listener
 
-  const executeTrade = () => {
+  const executeTrade = async () => {
     const cleanBuyAmount = buyAmount.replace(/,/g, "");
     const cleanSellAmount = sellAmount.replace(/,/g, "");
 
     // Check validations before executing trade
-    if (!checkSellAmountValidity(cleanSellAmount, sellCurrency)) {
+    const isSellValid = await checkSellAmountValidity(
+      cleanSellAmount,
+      sellCurrency
+    );
+    if (!isSellValid) {
       setSellAmountError(true);
       return;
     }
@@ -1857,6 +1871,7 @@ export const TradingWidget = forwardRef<TradingWidgetHandle, TradingWidgetProps>
                   creditInSellCurrency={creditInSellCurrency}
                   availableToSell={availableToSell}
                   formatBalance={formatBalance}
+                  creditAvailableUSD={creditAvailableUSD}
                 />
               </div>
               <div className="text-[13px] mt-1">

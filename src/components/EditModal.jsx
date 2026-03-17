@@ -148,12 +148,12 @@ export function EditModal({ open, onClose, balances, rates, creditLimit, rateRan
         {activeTab === 'balances' && (
           <div id="edit-panel-balances" role="tabpanel" aria-labelledby="edit-tab-balances" className="edit-tab-panel">
             <div className="edit-section">
-              <div className="edit-section-title">Credit Limit (USD)</div>
+              <div className="edit-section-title">Credit Line (USD)</div>
               <input
                 type="number"
                 className="form-input"
                 style={{ textAlign: 'right' }}
-                placeholder="Enter credit limit"
+                placeholder="Enter credit line"
                 value={editCreditLimit}
                 onChange={(e) => setEditCreditLimit(e.target.value)}
               />
